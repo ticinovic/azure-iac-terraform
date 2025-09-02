@@ -8,4 +8,3 @@
  The primary goal is to provision a complete infrastructure that adheres to security best practices, ensuring all resources operate within a private network and have no public exposure.
  
  This project deploys a secure Azure web application environment using Terraform. The entire deployment process is automated through a CI/CD pipeline with GitHub Actions.
----
