@@ -30,8 +30,45 @@ I've configured this project to spin up the following Azure resources, all with 
 
 ## Architecture Diagram
 
-*(A diagram illustrating the architecture would be embedded here.)*
+subgraph "Azure Cloud"
+    style AzureCloud fill:#f0f8ff,stroke:#0078d4,stroke-width:2px
 
+    subgraph VNet [Azure Virtual Network (10.0.0.0/16)]
+        direction LR
+        style VNet fill:#e3f2fd,stroke:#0078d4,stroke-width:1px,stroke-dasharray: 5 5
+
+        subgraph AppSubnet
+            WebApp
+        end
+
+        subgraph EndpointSubnet
+            PE[<img src='[https://raw.githubusercontent.com/microsoft/az-icon-collection/main/azure-symbol-original/Private%20Link.svg](https://raw.githubusercontent.com/microsoft/az-icon-collection/main/azure-symbol-original/Private%20Link.svg)' width='40' height='40' /><br/>Private Endpoint]
+        end
+
+        NSG
+    end
+
+    subgraph PaaS
+        direction TB
+        SA
+        PDNS
+    end
+end
+
+%% Define Connections & Data Flow
+GHA -- "Deploys & Manages" --> VNet
+GHA -- "Deploys & Manages" --> PaaS
+
+WebApp -- "Outbound via VNet Integration" --> PE
+PE -.->|Private IP within VNet| SA
+
+PDNS -. "Resolves FQDN to Private IP".-> VNet
+NSG -- "Applies Rules" --> AppSubnet
+NSG -- "Applies Rules" --> EndpointSubnet
+
+%% Styling
+classDef default fill:#ffffff,stroke:#333,stroke-width:1px;
+class GHA,WebApp,PE,NSG,SA,PDNS default;
 ## Prerequisites
 
 You'll need a few things before you get started:
@@ -44,7 +81,7 @@ You'll need a few things before you get started:
 
 Ready to deploy? Just follow these steps:
 
-1.  **Fork this Repository**: Create a fork of this repository in your own GitHub account.
+1.  **Copy this Repository**: Create a copy of this repository in your own GitHub account.
 
 2.  **Create an Azure Service Principal**: This is the identity GitHub Actions will use to authenticate to Azure.
 
@@ -56,7 +93,7 @@ Ready to deploy? Just follow these steps:
         ```
       - The command will output a JSON object. **Copy the `appId`, `password`, and `tenant` values.**
 
-3.  **Configure GitHub Secrets**: In your forked repository, go to `Settings` \> `Secrets and variables` \> `Actions` and create these four repository secrets:
+3.  **Configure GitHub Secrets**: In your copied repository, go to `Settings` \> `Secrets and variables` \> `Actions` and create these four repository secrets:
 
       - `ARM_CLIENT_ID`: The `appId` from the previous step.
       - `ARM_CLIENT_SECRET`: The `password` from the previous step.
