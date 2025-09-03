@@ -31,7 +31,7 @@ jobs:
       - name: Terraform Init
         id: init
         run: terraform init
-        working-directory: ./terraform
+        working-directory: terraform
         env:
           ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
           ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
@@ -42,19 +42,19 @@ jobs:
       - name: Terraform Format
         id: fmt
         run: terraform fmt -check
-        working-directory: ./terraform
+        working-directory: terraform
 
       # Validate the Terraform configuration
       - name: Terraform Validate
         id: validate
         run: terraform validate -no-color
-        working-directory: ./terraform
+        working-directory: terraform
 
       # Generates an execution plan for Terraform
       - name: Terraform Plan
         id: plan
         run: terraform plan -no-color -input=false -out=tfplan
-        working-directory: ./terraform
+        working-directory: terraform
         env:
           ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
           ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
