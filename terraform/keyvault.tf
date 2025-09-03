@@ -1,4 +1,4 @@
-# terraform/keyvault.tf (Bonus)
+# terraform/keyvault.tf
 
 # Create an Azure Key Vault
 resource "azurerm_key_vault" "main" {
