@@ -55,7 +55,7 @@ resource "azurerm_network_security_group" "main" {
     source_address_prefix      = azurerm_subnet.app_service_subnet.address_prefix
     destination_address_prefix = azurerm_subnet.endpoint_subnet.address_prefix
   }
-  
+
   security_rule {
     name                       = "DenyAllOtherAppOutbound"
     priority                   = 4096
