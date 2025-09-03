@@ -10,7 +10,6 @@ resource "azurerm_virtual_network" "main" {
 }
 
 # Create a dedicated subnet for the App Service VNet Integration
-# This subnet must be delegated to Microsoft.Web/serverFarms
 resource "azurerm_subnet" "app_service_subnet" {
   name                 = "snet-appservice"
   resource_group_name  = azurerm_resource_group.main.name
@@ -27,14 +26,14 @@ resource "azurerm_subnet" "app_service_subnet" {
 }
 
 # Create a dedicated subnet for Private Endpoints
-# This subnet must have private endpoint network policies disabled
 resource "azurerm_subnet" "endpoint_subnet" {
   name                 = "snet-endpoints"
   resource_group_name  = azurerm_resource_group.main.name
   virtual_network_name = azurerm_virtual_network.main.name
   address_prefixes     = ["10.0.2.0/24"]
 
-  private_endpoint_network_policies_enabled = false
+  # FIX: Updated deprecated argument to the new syntax
+  private_endpoint_network_policies = "Disabled"
 }
 
 # Create a Network Security Group to control traffic within the VNet
@@ -52,10 +51,11 @@ resource "azurerm_network_security_group" "main" {
     protocol                   = "Tcp"
     source_port_range          = "*"
     destination_port_range     = "443"
-    source_address_prefix      = azurerm_subnet.app_service_subnet.address_prefix
-    destination_address_prefix = azurerm_subnet.endpoint_subnet.address_prefix
+    # FIX: Changed 'address_prefix' to 'address_prefixes'
+    source_address_prefixes      = azurerm_subnet.app_service_subnet.address_prefixes
+    destination_address_prefixes = azurerm_subnet.endpoint_subnet.address_prefixes
   }
-
+  
   security_rule {
     name                       = "DenyAllOtherAppOutbound"
     priority                   = 4096
@@ -64,7 +64,8 @@ resource "azurerm_network_security_group" "main" {
     protocol                   = "*"
     source_port_range          = "*"
     destination_port_range     = "*"
-    source_address_prefix      = azurerm_subnet.app_service_subnet.address_prefix
+    # FIX: Changed 'address_prefix' to 'address_prefixes'
+    source_address_prefixes      = azurerm_subnet.app_service_subnet.address_prefixes
     destination_address_prefix = "*"
   }
 }
