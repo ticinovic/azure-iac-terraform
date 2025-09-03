@@ -29,7 +29,7 @@ resource "azurerm_key_vault_secret" "example" {
 resource "azurerm_key_vault_access_policy" "webapp" {
   key_vault_id = azurerm_key_vault.main.id
   tenant_id    = data.azurerm_client_config.current.tenant_id
-  object_id    = azurerm_linux_web_app.main.identity.principal_id
+  object_id    = azurerm_linux_web_app.main.identity[0].principal_id
 
   secret_permissions = [
     "Get",
