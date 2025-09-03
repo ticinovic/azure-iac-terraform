@@ -14,7 +14,7 @@ resource "azurerm_storage_account" "main" {
   location                 = azurerm_resource_group.main.location
   account_tier             = "Standard"
   account_replication_type = "LRS"
-  
+
   # CRITICAL: This setting disables all access from the public internet.
   public_network_access_enabled = false
 

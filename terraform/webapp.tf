@@ -17,11 +17,9 @@ resource "azurerm_linux_web_app" "main" {
   resource_group_name = azurerm_resource_group.main.name
   service_plan_id     = azurerm_service_plan.main.id
   https_only          = true
-  
-  # This setting enables the VNet Integration feature for outbound traffic.
+
   virtual_network_subnet_id = azurerm_subnet.app_service_subnet.id
 
-  # Enable System-Assigned Managed Identity
   identity {
     type = "SystemAssigned"
   }
@@ -34,7 +32,8 @@ resource "azurerm_linux_web_app" "main" {
 
   site_config {
     application_stack {
-      # This example uses a simple static site, so no specific stack is needed.
+      # FIX: A runtime stack must be defined.
+      node_version = "18-lts"
     }
     always_on = true
   }
