@@ -10,7 +10,7 @@ on:
 
 permissions:
   contents: read
-  pull-requests: write # Required to post plan comments on PRs
+  pull-requests: write
 
 jobs:
   terraform:
@@ -19,15 +19,14 @@ jobs:
     environment: production
 
     steps:
-      # Checkout the repository to the GitHub Actions runner
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Install the latest version of Terraform CLI
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.5.0 # Pinned version for consistency
 
-      # Initialize a new or existing Terraform working directory
       - name: Terraform Init
         id: init
         run: terraform init
@@ -38,19 +37,16 @@ jobs:
           ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
           ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
 
-      # Check that all Terraform configuration files adhere to a canonical format
       - name: Terraform Format
         id: fmt
         run: terraform fmt -check
         working-directory: terraform
 
-      # Validate the Terraform configuration
       - name: Terraform Validate
         id: validate
         run: terraform validate -no-color
         working-directory: terraform
 
-      # Generates an execution plan for Terraform
       - name: Terraform Plan
         id: plan
         run: terraform plan -no-color -input=false -out=tfplan
@@ -62,7 +58,6 @@ jobs:
           ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
         continue-on-error: true
 
-      # Create a comment on the PR with the plan output
       - name: Update Pull Request with Plan
         uses: actions/github-script@v6
         if: github.event_name == 'pull_request'
@@ -99,11 +94,10 @@ jobs:
         env:
           PLAN: ${{ steps.plan.outputs.stdout }}
 
-      # On push to main, apply the Terraform configuration
       - name: Terraform Apply
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: terraform apply -auto-approve -input=false tfplan
-        working-directory: ./terraform
+        working-directory: terraform
         env:
           ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
           ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
