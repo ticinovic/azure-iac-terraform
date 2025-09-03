@@ -44,28 +44,28 @@ resource "azurerm_network_security_group" "main" {
   tags                = var.tags
 
   security_rule {
-    name                       = "AllowAppToEndpointHTTPS"
-    priority                   = 100
-    direction                  = "Outbound"
-    access                     = "Allow"
-    protocol                   = "Tcp"
-    source_port_range          = "*"
-    destination_port_range     = "443"
+    name                   = "AllowAppToEndpointHTTPS"
+    priority               = 100
+    direction              = "Outbound"
+    access                 = "Allow"
+    protocol               = "Tcp"
+    source_port_range      = "*"
+    destination_port_range = "443"
     # FIX: Changed 'address_prefix' to 'address_prefixes'
     source_address_prefixes      = azurerm_subnet.app_service_subnet.address_prefixes
     destination_address_prefixes = azurerm_subnet.endpoint_subnet.address_prefixes
   }
-  
+
   security_rule {
-    name                       = "DenyAllOtherAppOutbound"
-    priority                   = 4096
-    direction                  = "Outbound"
-    access                     = "Deny"
-    protocol                   = "*"
-    source_port_range          = "*"
-    destination_port_range     = "*"
+    name                   = "DenyAllOtherAppOutbound"
+    priority               = 4096
+    direction              = "Outbound"
+    access                 = "Deny"
+    protocol               = "*"
+    source_port_range      = "*"
+    destination_port_range = "*"
     # FIX: Changed 'address_prefix' to 'address_prefixes'
-    source_address_prefixes      = azurerm_subnet.app_service_subnet.address_prefixes
+    source_address_prefixes    = azurerm_subnet.app_service_subnet.address_prefixes
     destination_address_prefix = "*"
   }
 }
