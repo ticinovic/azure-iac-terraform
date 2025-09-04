@@ -1,4 +1,6 @@
-# terraform/network.tf
+########################################
+# network.tf
+########################################
 
 # VNet
 resource "azurerm_virtual_network" "main" {
@@ -9,16 +11,27 @@ resource "azurerm_virtual_network" "main" {
   tags                = var.tags
 }
 
-# Subnet za App Service VNet Integration
+# Subnet za App Service VNet Integration (DODANA DELEGACIJA)
 resource "azurerm_subnet" "app_service_subnet" {
   name                 = "snet-appservice"
   resource_group_name  = azurerm_resource_group.main.name
   virtual_network_name = azurerm_virtual_network.main.name
   address_prefixes     = var.app_service_subnet_prefix
-  # za Integration subnet ne treba PE policies
+
+  delegation {
+    name = "appservice-delegation"
+    service_delegation {
+      name    = "Microsoft.Web/serverFarms"
+      actions = [
+        "Microsoft.Network/virtualNetworks/subnets/join/action",
+        "Microsoft.Network/virtualNetworks/subnets/prepareNetworkPolicies/action",
+        "Microsoft.Network/virtualNetworks/subnets/unprepareNetworkPolicies/action"
+      ]
+    }
+  }
 }
 
-# Subnet za Private Endpoints (mora imati PE policies disabled)
+# Subnet za Private Endpoints
 resource "azurerm_subnet" "endpoint_subnet" {
   name                 = "snet-endpoints"
   resource_group_name  = azurerm_resource_group.main.name
@@ -29,13 +42,12 @@ resource "azurerm_subnet" "endpoint_subnet" {
   private_endpoint_network_policies = "Disabled"
 }
 
-# NSG - stroga pravila
+# NSG (stroga pravila)
 resource "azurerm_network_security_group" "main" {
   name                = "nsg-${var.project_name}-${var.environment}"
   location            = azurerm_resource_group.main.location
   resource_group_name = azurerm_resource_group.main.name
 
-  # Zatvori sav inbound
   security_rule {
     name                       = "DenyAllInbound"
     priority                   = 4096
@@ -48,7 +60,6 @@ resource "azurerm_network_security_group" "main" {
     destination_address_prefix = "*"
   }
 
-  # Dozvoli outbound 443 prema PE subnetu (za usluge iza Private Endpointa)
   security_rule {
     name                       = "Allow443ToPE"
     priority                   = 100
@@ -61,7 +72,6 @@ resource "azurerm_network_security_group" "main" {
     destination_address_prefix = azurerm_subnet.endpoint_subnet.address_prefixes[0]
   }
 
-  # Zabrani ostali outbound
   security_rule {
     name                       = "DenyAllOutbound"
     priority                   = 4095
@@ -77,7 +87,7 @@ resource "azurerm_network_security_group" "main" {
   tags = var.tags
 }
 
-# Poveži NSG na subnet-e
+# Povezivanje NSG na subnet-e
 resource "azurerm_subnet_network_security_group_association" "app_service" {
   subnet_id                 = azurerm_subnet.app_service_subnet.id
   network_security_group_id = azurerm_network_security_group.main.id
