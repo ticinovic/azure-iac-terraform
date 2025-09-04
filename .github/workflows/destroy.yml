@@ -15,6 +15,7 @@ jobs:
   destroy:
     if: ${{ github.event.inputs.confirmation == 'destroy' }}
     runs-on: ubuntu-latest
+    environment: production
     defaults:
       run:
         working-directory: terraform
