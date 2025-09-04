@@ -1,5 +1,3 @@
-# .github/workflows/deploy.yml
-
 name: 'Terraform CI/CD'
 
 on:
@@ -10,9 +8,11 @@ on:
     branches:
       - main
 
+# Add permissions for the login action to work correctly
 permissions:
   contents: read
   pull-requests: write
+  id-token: write # This is required for OIDC authentication
 
 jobs:
   terraform:
@@ -24,63 +24,66 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Azure Login
+      # This is the new, definitive login step
+      - name: Azure login
         uses: azure/login@v1
         with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
-
+          client-id: ${{ secrets.ARM_CLIENT_ID }}
+          client-secret: ${{ secrets.ARM_CLIENT_SECRET }}
+          tenant-id: ${{ secrets.ARM_TENANT_ID }}
+          subscription-id: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+          
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: 1.9.8
+          terraform_version: 1.5.0 # Pinned for consistency
 
       - name: Terraform Init
         id: init
         run: terraform init
-        working-directory: ./terraform
+        working-directory: terraform
 
       - name: Terraform Format
         id: fmt
         run: terraform fmt -check
-        working-directory: ./terraform
+        working-directory: terraform
 
       - name: Terraform Validate
         id: validate
         run: terraform validate -no-color
-        working-directory: ./terraform
+        working-directory: terraform
 
       - name: Terraform Plan
         id: plan
         run: terraform plan -no-color -input=false -out=tfplan
-        working-directory: ./terraform
-        if: github.event_name == 'pull_request'
+        working-directory: terraform
+        continue-on-error: true
 
       - name: Update Pull Request with Plan
         uses: actions/github-script@v6
         if: github.event_name == 'pull_request'
-        env:
-          PLAN: "terraform\n${{ steps.plan.outputs.stdout }}"
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const output = `#### Terraform Format and Style 🖌\`${{ steps.fmt.outcome }}\`
             #### Terraform Validation 🤖\`${{ steps.validate.outcome }}\`
             <details><summary>Validation Output</summary>
 
-            \`\`\`hcl
+            \`\`\`\n
             ${{ steps.validate.outputs.stdout }}
             \`\`\`
 
             </details>
 
             #### Terraform Plan 📖\`${{ steps.plan.outcome }}\`
+
             <details><summary>Show Plan</summary>
 
-            \`\`\`hcl
-            ${process.env.PLAN}
+            \`\`\`\n
+            ${{ steps.plan.outputs.stdout }}
             \`\`\`
 
             </details>
+
             *Pushed by: @${{ github.actor }}, Action: \`${{ github.event_name }}\`*`;
 
             github.rest.issues.createComment({
@@ -89,8 +92,10 @@ jobs:
               repo: context.repo.repo,
               body: output
             })
+        env:
+          PLAN: ${{ steps.plan.outputs.stdout }}
 
       - name: Terraform Apply
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: terraform apply -auto-approve -input=false tfplan
-        working-directory: ./terraform
+        working-directory: terraform

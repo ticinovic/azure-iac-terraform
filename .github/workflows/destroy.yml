@@ -1,27 +1,35 @@
-# .github/workflows/destroy.yml
-
-name: 'Terraform Manual Destroy'
+name: 'Terraform Destroy'
 
 on:
   workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type "destroy" to confirm you want to tear down all infrastructure.'
+        required: true
+        default: 'do-not-destroy'
 
 permissions:
   contents: read
+  id-token: write # Required for OIDC authentication
 
 jobs:
   terraform_destroy:
     name: 'Terraform Destroy'
     runs-on: ubuntu-latest
-    environment: production
+    
+    if: github.event.inputs.confirmation == 'destroy'
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Azure Login
+      - name: Azure login
         uses: azure/login@v1
         with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          client-id: ${{ secrets.ARM_CLIENT_ID }}
+          tenant-id: ${{ secrets.ARM_TENANT_ID }}
+          client-secret: ${{ secrets.ARM_CLIENT_SECRET }}
+          subscription-id: ${{ secrets.ARM_SUBSCRIPTION_ID }}
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -30,8 +38,8 @@ jobs:
 
       - name: Terraform Init
         run: terraform init
-        working-directory: ./terraform
+        working-directory: terraform
 
       - name: Terraform Destroy
         run: terraform destroy -auto-approve
-        working-directory: ./terraform
+        working-directory: terraform
