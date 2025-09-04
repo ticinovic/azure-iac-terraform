@@ -8,9 +8,11 @@ on:
     branches:
       - main
 
+# Add permissions for the login action to work correctly
 permissions:
   contents: read
   pull-requests: write
+  id-token: write # This is required for OIDC authentication
 
 jobs:
   terraform:
@@ -22,41 +24,36 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # This is the new, definitive login step
+      - name: Azure login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: 1.9.8 # Pinned version for consistency
+          terraform_version: 1.5.0 # Pinned for consistency
 
       - name: Terraform Init
         id: init
         run: terraform init
-        working-directory: ./terraform
-        env:
-          ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
-          ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
-          ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
-          ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+        working-directory: terraform
 
       - name: Terraform Format
         id: fmt
         run: terraform fmt -check
-        working-directory: ./terraform
+        working-directory: terraform
 
       - name: Terraform Validate
         id: validate
         run: terraform validate -no-color
-        working-directory: ./terraform
-
+        working-directory: terraform
 
       - name: Terraform Plan
         id: plan
         run: terraform plan -no-color -input=false -out=tfplan
-        working-directory: ./terraform
-        env:
-          ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
-          ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
-          ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
-          ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+        working-directory: terraform
         continue-on-error: true
 
       - name: Update Pull Request with Plan
@@ -98,9 +95,4 @@ jobs:
       - name: Terraform Apply
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: terraform apply -auto-approve -input=false tfplan
-        working-directory: ./terraform
-        env:
-          ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
-          ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
-          ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
-          ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+        working-directory: terraform
