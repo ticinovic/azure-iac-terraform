@@ -1,4 +1,6 @@
-# terraform/webapp.tf
+########################################
+# webapp.tf
+########################################
 
 # App Service Plan (Premium za VNet integration)
 resource "azurerm_service_plan" "main" {
@@ -21,15 +23,17 @@ resource "azurerm_linux_web_app" "main" {
   identity { type = "SystemAssigned" }
 
   site_config {
-    always_on              = true
-    vnet_route_all_enabled = true
+    always_on = true
 
-    # Prilagodi runtime ako treba (node/python/dotnet/java ili docker)
+    # prilagodi runtime po potrebi
     application_stack {
       node_version = "18-lts"
     }
 
-    # Dozvoli samo promet iz tvog VNet subnet-a
+    # VNet route all (umjesto rezerviranog app settinga)
+    vnet_route_all_enabled = true
+
+    # Access Restrictions: dozvoli samo iz app subnet-a
     ip_restriction {
       name                      = "allow-app-vnet"
       priority                  = 100
@@ -46,7 +50,6 @@ resource "azurerm_linux_web_app" "main" {
     }
   }
 
-
   tags = var.tags
 }
 
@@ -56,9 +59,8 @@ resource "azurerm_app_service_virtual_network_swift_connection" "this" {
   subnet_id      = azurerm_subnet.app_service_subnet.id
 }
 
-# (Opcionalno) deploy sample iz Azure repo-a – OK i s restrikcijama
-resource "azurerm_app_service_source_control" "main" {
-  app_id   = azurerm_linux_web_app.main.id
-  repo_url = "https://github.com/Azure-Samples/html-docs-hello-world"
-  branch   = "master"
-}
+/* Uklonjeno:
+resource "azurerm_app_service_source_control" "main" { ... }
+— uzrokovalo je 404 "Cannot find User ..." i nije potrebno za zadatak.
+Ako želiš demo sadržaj, možemo ubaciti Zip Deploy kasnije.
+*/
