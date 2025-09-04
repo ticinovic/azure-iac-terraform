@@ -1,98 +1,84 @@
-name: 'Terraform CI/CD'
+name: Terraform Deploy
 
 on:
-  push:
-    branches:
-      - main
   pull_request:
-    branches:
-      - main
+    branches: [ "main" ]
+  push:
+    branches: [ "main" ]
 
-# Add permissions for the login action to work correctly
 permissions:
   contents: read
   pull-requests: write
-  id-token: write # This is required for OIDC authentication
 
 jobs:
   terraform:
-    name: 'Terraform'
     runs-on: ubuntu-latest
     environment: production
+    defaults:
+      run:
+        working-directory: terraform
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # This is the new, definitive login step
       - name: Azure login
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
-          
+
+      - name: Show Azure context
+        run: |
+          az account show
+          az account list -o table
+
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: 1.5.0 # Pinned for consistency
+          terraform_version: 1.9.8
 
       - name: Terraform Init
-        id: init
-        run: terraform init
-        working-directory: terraform
+        run: terraform init -input=false
 
       - name: Terraform Format
-        id: fmt
         run: terraform fmt -check
-        working-directory: terraform
 
       - name: Terraform Validate
-        id: validate
         run: terraform validate -no-color
-        working-directory: terraform
 
       - name: Terraform Plan
         id: plan
         run: terraform plan -no-color -input=false -out=tfplan
-        working-directory: terraform
-        continue-on-error: true
 
-      - name: Update Pull Request with Plan
-        uses: actions/github-script@v6
+      - name: Save human-readable plan
+        run: terraform show -no-color tfplan > plan.txt
+
+      - name: Upload plan artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-plan
+          path: terraform/plan.txt
+
+      - name: Comment PR with Plan
         if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
         with:
           script: |
-            const output = `#### Terraform Format and Style 🖌\`${{ steps.fmt.outcome }}\`
-            #### Terraform Validation 🤖\`${{ steps.validate.outcome }}\`
-            <details><summary>Validation Output</summary>
-
-            \`\`\`\n
-            ${{ steps.validate.outputs.stdout }}
-            \`\`\`
-
-            </details>
-
-            #### Terraform Plan 📖\`${{ steps.plan.outcome }}\`
-
-            <details><summary>Show Plan</summary>
-
-            \`\`\`\n
-            ${{ steps.plan.outputs.stdout }}
-            \`\`\`
-
-            </details>
-
-            *Pushed by: @${{ github.actor }}, Action: \`${{ github.event_name }}\`*`;
-
+            const fs = require('fs');
+            const plan = fs.readFileSync('terraform/plan.txt','utf8');
+            let text = plan;
+            if (text.length > 60000) {
+              text = text.slice(text.length - 60000);
+              text = "_(truncated to last 60k chars)_\n" + text;
+            }
+            const body = "### Terraform Plan\n```hcl\n" + text + "\n```";
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: output
-            })
-        env:
-          PLAN: ${{ steps.plan.outputs.stdout }}
+              body
+            });
 
-      - name: Terraform Apply
+      - name: Terraform Apply (on main)
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: terraform apply -auto-approve -input=false tfplan
-        working-directory: terraform

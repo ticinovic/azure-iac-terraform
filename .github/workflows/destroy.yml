@@ -1,24 +1,23 @@
-name: 'Terraform Destroy'
+name: Terraform Destroy
 
 on:
   workflow_dispatch:
     inputs:
       confirmation:
-        description: 'Type "destroy" to confirm you want to tear down all infrastructure.'
+        description: 'Type "destroy" to confirm teardown.'
         required: true
         default: 'do-not-destroy'
 
 permissions:
   contents: read
-  id-token: write # Required for OIDC authentication
 
 jobs:
-  terraform_destroy:
-    name: 'Terraform Destroy'
+  destroy:
+    if: ${{ github.event.inputs.confirmation == 'destroy' }}
     runs-on: ubuntu-latest
-    
-    if: github.event.inputs.confirmation == 'destroy'
-
+    defaults:
+      run:
+        working-directory: terraform
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -34,9 +33,7 @@ jobs:
           terraform_version: 1.9.8
 
       - name: Terraform Init
-        run: terraform init
-        working-directory: terraform
+        run: terraform init -input=false
 
       - name: Terraform Destroy
-        run: terraform destroy -auto-approve
-        working-directory: terraform
+        run: terraform destroy -auto-approve -input=false
