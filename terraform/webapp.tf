@@ -22,6 +22,7 @@ resource "azurerm_linux_web_app" "main" {
 
   site_config {
     always_on = true
+    vnet_route_all_enabled = true
 
     # Prilagodi runtime ako treba (node/python/dotnet/java ili docker)
     application_stack {
@@ -45,12 +46,6 @@ resource "azurerm_linux_web_app" "main" {
     }
   }
 
-  app_settings = {
-    "WEBSITE_VNET_ROUTE_ALL" = "1"
-    "WEBSITE_DNS_SERVER"     = "168.63.129.16"
-    # Ako koristiš KV reference (nakon što dodaš secret u KV):
-    # "MyWebAppSecret" = "@Microsoft.KeyVault(SecretUri=https://${var.key_vault_name}.vault.azure.net/secrets/<naziv>/<verzija>)"
-  }
 
   tags = var.tags
 }

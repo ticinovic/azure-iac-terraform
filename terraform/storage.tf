@@ -10,10 +10,10 @@ resource "azurerm_storage_account" "main" {
   account_kind             = "StorageV2"
   min_tls_version          = "TLS1_2"
 
-  allow_blob_public_access      = false
-  public_network_access_enabled = false # ako provider traži string varijantu: public_network_access = "Disabled"
+  # OVO OSTAVI — gasi javni pristup na mrežnoj razini
+  public_network_access_enabled = false
 
-  # Opcionalno (kad je PNA off, svejedno je deny – zadržimo radi jasnoće)
+  # (opcionalno, radi jasnoće)
   network_rules {
     default_action = "Deny"
     bypass         = ["AzureServices"]

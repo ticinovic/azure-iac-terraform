@@ -26,7 +26,7 @@ resource "azurerm_subnet" "endpoint_subnet" {
   address_prefixes     = var.endpoint_subnet_prefix
 
   # novi provider atribut
-  private_endpoint_network_policies_enabled = false
+  private_endpoint_network_policies = "Disabled"
 }
 
 # NSG - stroga pravila
