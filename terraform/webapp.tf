@@ -21,7 +21,7 @@ resource "azurerm_linux_web_app" "main" {
   identity { type = "SystemAssigned" }
 
   site_config {
-    always_on = true
+    always_on              = true
     vnet_route_all_enabled = true
 
     # Prilagodi runtime ako treba (node/python/dotnet/java ili docker)
