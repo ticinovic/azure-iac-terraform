@@ -11,7 +11,7 @@ resource "azurerm_storage_account" "main" {
   min_tls_version          = "TLS1_2"
 
   allow_blob_public_access      = false
-  public_network_access_enabled = false   # ako provider traži string varijantu: public_network_access = "Disabled"
+  public_network_access_enabled = false # ako provider traži string varijantu: public_network_access = "Disabled"
 
   # Opcionalno (kad je PNA off, svejedno je deny – zadržimo radi jasnoće)
   network_rules {

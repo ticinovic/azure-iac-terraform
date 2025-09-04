@@ -30,18 +30,18 @@ variable "tags" {
 
 # Mreža
 variable "vnet_address_space" {
-  type        = list(string)
-  default     = ["10.0.0.0/16"]
+  type    = list(string)
+  default = ["10.0.0.0/16"]
 }
 
 variable "app_service_subnet_prefix" {
-  type        = list(string)
-  default     = ["10.0.1.0/24"]
+  type    = list(string)
+  default = ["10.0.1.0/24"]
 }
 
 variable "endpoint_subnet_prefix" {
-  type        = list(string)
-  default     = ["10.0.2.0/24"]
+  type    = list(string)
+  default = ["10.0.2.0/24"]
 }
 
 # App Service Plan
