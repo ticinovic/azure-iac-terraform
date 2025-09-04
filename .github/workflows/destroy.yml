@@ -19,6 +19,7 @@ jobs:
     defaults:
       run:
         working-directory: terraform
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -28,13 +29,22 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
+      - name: Download state from last successful Deploy run
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          workflow: 'Terraform Deploy'
+          workflow_conclusion: success
+          name: tfstate-main
+          branch: main
+          path: terraform
+
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.9.8
 
       - name: Terraform Init
-        run: terraform init -input=false
+        run: terraform init -input=false -upgrade
 
       - name: Terraform Destroy
         run: terraform destroy -auto-approve -input=false

@@ -27,27 +27,21 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Show Azure context
-        run: |
-          az account show
-          az account list -o table
-
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.9.8
 
       - name: Terraform Init
-        run: terraform init -input=false
+        run: terraform init -input=false -upgrade
 
-      - name: Terraform Format
+      - name: Terraform Format (check)
         run: terraform fmt -check
 
       - name: Terraform Validate
         run: terraform validate -no-color
 
       - name: Terraform Plan
-        id: plan
         run: terraform plan -no-color -input=false -out=tfplan
 
       - name: Save human-readable plan
@@ -66,11 +60,9 @@ jobs:
           script: |
             const fs = require('fs');
             const plan = fs.readFileSync('terraform/plan.txt','utf8');
-            let text = plan;
-            if (text.length > 60000) {
-              text = text.slice(text.length - 60000);
-              text = "_(truncated to last 60k chars)_\n" + text;
-            }
+            const text = plan.length > 60000
+              ? "_(truncated to last 60k chars)_\n" + plan.slice(-60000)
+              : plan;
             const body = "### Terraform Plan\n```hcl\n" + text + "\n```";
             github.rest.issues.createComment({
               issue_number: context.issue.number,
@@ -82,3 +74,14 @@ jobs:
       - name: Terraform Apply (on main)
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: terraform apply -auto-approve -input=false tfplan
+
+      - name: Upload Terraform state (artifact)
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfstate-main
+          path: |
+            terraform/terraform.tfstate
+            terraform/terraform.tfstate.backup
+            terraform/.terraform.lock.hcl
+          retention-days: 14
