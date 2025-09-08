@@ -50,9 +50,9 @@ variable "tags" {
   description = "Zajedničke oznake na resursima."
   type        = map(string)
   default = {
-    owner        = "iac"
-    environment  = "dev"
-    data_class   = "internal"
-    managed_by   = "terraform"
+    owner       = "iac"
+    environment = "dev"
+    data_class  = "internal"
+    managed_by  = "terraform"
   }
 }

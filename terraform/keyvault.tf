@@ -1,12 +1,12 @@
 resource "azurerm_key_vault" "kv" {
-  name                        = "kv-${var.project_name}-${var.environment}"
-  resource_group_name         = azurerm_resource_group.rg.name
-  location                    = azurerm_resource_group.rg.location
-  tenant_id                   = data.azurerm_client_config.current.tenant_id
+  name                = "kv-${var.project_name}-${var.environment}"
+  resource_group_name = azurerm_resource_group.rg.name
+  location            = azurerm_resource_group.rg.location
+  tenant_id           = data.azurerm_client_config.current.tenant_id
 
-  sku_name                    = "standard"
-  soft_delete_retention_days  = 90
-  purge_protection_enabled    = true
+  sku_name                   = "standard"
+  soft_delete_retention_days = 90
+  purge_protection_enabled   = true
 
   public_network_access_enabled = false
   enable_rbac_authorization     = false

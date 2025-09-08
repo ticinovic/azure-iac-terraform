@@ -40,11 +40,11 @@ resource "azurerm_linux_web_app" "app" {
       virtual_network_subnet_id = azurerm_subnet.app_subnet.id
     }
     ip_restriction {
-      name         = "deny-all"
-      priority     = 200
-      action       = "Deny"
-      ip_address   = "0.0.0.0/0"
-      description  = "Deny everything else"
+      name        = "deny-all"
+      priority    = 200
+      action      = "Deny"
+      ip_address  = "0.0.0.0/0"
+      description = "Deny everything else"
     }
   }
 
