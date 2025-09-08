@@ -1,65 +1,58 @@
-# terraform/variables.tf
-
-# Općenito
 variable "project_name" {
+  description = "Ime projekta, koristi se u imenovanju resursa."
   type        = string
-  description = "Short project name used in resource names."
   default     = "secureapp"
 }
 
 variable "environment" {
+  description = "Okruženje (npr. dev, test, prod)."
   type        = string
-  description = "Environment name (dev/stg/prod)."
   default     = "dev"
 }
 
 variable "location" {
+  description = "Azure regija."
   type        = string
-  description = "Azure region display name."
-  default     = "West Europe"
+  default     = "westeurope"
 }
 
-variable "tags" {
-  type        = map(string)
-  description = "Common tags."
-  default = {
-    project = "Secure Azure IaC"
-    env     = "Development"
-  }
-}
-
-# Mreža
 variable "vnet_address_space" {
-  type    = list(string)
-  default = ["10.0.0.0/16"]
+  description = "CIDR za VNet."
+  type        = list(string)
+  default     = ["10.0.0.0/16"]
 }
 
-variable "app_service_subnet_prefix" {
-  type    = list(string)
-  default = ["10.0.1.0/24"]
+variable "app_subnet_cidr" {
+  description = "CIDR za App Service (VNet Integration) podmrežu."
+  type        = list(string)
+  default     = ["10.0.1.0/24"]
 }
 
-variable "endpoint_subnet_prefix" {
-  type    = list(string)
-  default = ["10.0.2.0/24"]
+variable "endpoint_subnet_cidr" {
+  description = "CIDR za Private Endpoint podmrežu."
+  type        = list(string)
+  default     = ["10.0.2.0/24"]
 }
 
-# App Service Plan
-variable "app_service_sku" {
+variable "app_service_plan_sku" {
+  description = "SKU za App Service Plan (PremiumV2/V3 potreban za VNet Integration)."
   type        = string
-  description = "Premium SKU potreban za VNet integration."
   default     = "P1v2"
 }
 
-# Imena resursa (moguće ih promijeniti po želji)
 variable "storage_account_name" {
+  description = "Unikatno ime Storage Accounta (3-24 lower alnum)."
   type        = string
-  description = "3–24, [a-z0-9], globalno jedinstveno."
-  default     = "stsecureappdev01"
+  default     = null
 }
 
-variable "key_vault_name" {
-  type        = string
-  description = "3–24, [a-z0-9-], globalno jedinstveno."
-  default     = "kv-secureapp-dev01"
+variable "tags" {
+  description = "Zajedničke oznake na resursima."
+  type        = map(string)
+  default = {
+    owner        = "iac"
+    environment  = "dev"
+    data_class   = "internal"
+    managed_by   = "terraform"
+  }
 }
