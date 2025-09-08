@@ -15,13 +15,15 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
 
-    # Run all shell steps inside the terraform/ folder
+    # run all shell steps inside terraform/ by default
     defaults:
       run:
         working-directory: terraform
 
     env:
       ARM_USE_OIDC: false
+      TF_INPUT: 0
+      TF_IN_AUTOMATION: 1
 
     steps:
       - name: Checkout
@@ -32,19 +34,31 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
+      - name: Show working dir and files (debug)
+        run: |
+          echo "PWD: $(pwd)"
+          echo "Repo tree (top):"
+          ls -la ..
+          echo "Terraform dir contents:"
+          ls -la
+          echo "Terraform version:"
+          terraform -version || true
+
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.9.8
 
-      - name: Terraform Init
-        run: terraform init
+      - name: Terraform Init (with debug)
+        run: |
+          set -euxo pipefail
+          terraform init -upgrade -no-color
 
       - name: Terraform Format Check
         run: terraform fmt -check -recursive
 
       - name: Terraform Validate
-        run: terraform validate
+        run: terraform validate -no-color
 
       - name: Terraform Plan (PR)
         if: github.event_name == 'pull_request'
@@ -67,27 +81,15 @@ jobs:
           script: |
             const fs = require('fs');
             const path = 'terraform/plan.txt';
-            if (fs.existsSync(path)) {
-              const body = [
-                '**Terraform Plan**:',
-                '```',
-                fs.readFileSync(path, 'utf8').slice(0, 65000), // PR comment size safety
-                '```'
-              ].join('\n');
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.payload.pull_request.number,
-                body
-              });
-            } else {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.payload.pull_request.number,
-                body: 'Terraform plan file not found.'
-              });
-            }
+            const body = fs.existsSync(path)
+              ? ['**Terraform Plan**:', '```', fs.readFileSync(path, 'utf8').slice(0, 65000), '```'].join('\n')
+              : 'Terraform plan file not found.';
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              body
+            });
 
       - name: Terraform Plan (main)
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
@@ -107,7 +109,6 @@ jobs:
             terraform/terraform.tfstate.backup
           retention-days: 30
 
-      # Post-deploy: upload a simple HTML page to the Web App
       - name: Deploy Sample Web Page (main)
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: |
