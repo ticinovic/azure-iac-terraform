@@ -1,22 +1,23 @@
-resource "azurerm_key_vault" "kv" {
-  name                = "kv-${var.project_name}-${var.environment}"
-  resource_group_name = azurerm_resource_group.rg.name
-  location            = azurerm_resource_group.rg.location
-  tenant_id           = data.azurerm_client_config.current.tenant_id
+data "azurerm_client_config" "current" {}
 
-  sku_name                   = "standard"
-  soft_delete_retention_days = 90
-  purge_protection_enabled   = true
+resource "azurerm_key_vault" "kv" {
+  name                        = "kv-${var.project_name}-${var.environment}"
+  resource_group_name         = azurerm_resource_group.rg.name
+  location                    = azurerm_resource_group.rg.location
+  tenant_id                   = data.azurerm_client_config.current.tenant_id
+
+  sku_name                    = "standard"
+  soft_delete_retention_days  = 90
+  purge_protection_enabled    = true
 
   public_network_access_enabled = false
-  enable_rbac_authorization     = false
+  # was: enable_rbac_authorization = false (deprecated)
+  rbac_authorization_enabled    = false
 
   tags = var.tags
 }
 
-data "azurerm_client_config" "current" {}
-
-# Private DNS za Key Vault
+# Private DNS for Key Vault
 resource "azurerm_private_dns_zone" "kv" {
   name                = "privatelink.vaultcore.azure.net"
   resource_group_name = azurerm_resource_group.rg.name
@@ -31,7 +32,7 @@ resource "azurerm_private_dns_zone_virtual_network_link" "kv_link" {
   registration_enabled  = false
 }
 
-# Private Endpoint za KV
+# Private Endpoint for KV
 resource "azurerm_private_endpoint" "kv_pe" {
   name                = "pe-kv-${local.base_name}"
   location            = azurerm_resource_group.rg.location
@@ -52,7 +53,7 @@ resource "azurerm_private_endpoint" "kv_pe" {
   }
 }
 
-# Daj Web App-ovoj MSI pristup tajnama (get/list) - identity definiramo u webapp.tf
+# Give Web App MSI secret GET/LIST
 resource "azurerm_key_vault_access_policy" "app_msi_policy" {
   key_vault_id = azurerm_key_vault.kv.id
   tenant_id    = data.azurerm_client_config.current.tenant_id

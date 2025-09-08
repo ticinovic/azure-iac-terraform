@@ -6,7 +6,6 @@ resource "azurerm_virtual_network" "vnet" {
   tags                = var.tags
 }
 
-# Podmreža za App Service VNet Integration (delegacija obavezna)
 resource "azurerm_subnet" "app_subnet" {
   name                 = "snet-app-${local.base_name}"
   resource_group_name  = azurerm_resource_group.rg.name
@@ -22,24 +21,25 @@ resource "azurerm_subnet" "app_subnet" {
   }
 }
 
-# Podmreža za Private Endpoints
 resource "azurerm_subnet" "endpoint_subnet" {
   name                 = "snet-endpoints-${local.base_name}"
   resource_group_name  = azurerm_resource_group.rg.name
   virtual_network_name = azurerm_virtual_network.vnet.name
   address_prefixes     = var.endpoint_subnet_cidr
 
-  private_endpoint_network_policies_enabled = false
+  # REMOVE this line – it's not supported in your provider version:
+  # private_endpoint_network_policies_enabled = false
+  #
+  # Modern AzureRM manages this automatically for Private Endpoints.
 }
 
-# NSG za App podmrežu (kontrola izlaza)
+# NSGs and associations (unchanged except shown here for completeness)
 resource "azurerm_network_security_group" "app_nsg" {
   name                = "nsg-app-${local.base_name}"
   location            = azurerm_resource_group.rg.location
   resource_group_name = azurerm_resource_group.rg.name
   tags                = var.tags
 
-  # Dozvoli DNS prema Azure resolveru
   security_rule {
     name                       = "allow-dns-out"
     priority                   = 110
@@ -52,7 +52,6 @@ resource "azurerm_network_security_group" "app_nsg" {
     destination_address_prefix = "168.63.129.16"
   }
 
-  # Dozvoli HTTPS iz app podmreže prema endpoint podmreži
   security_rule {
     name                       = "allow-https-to-endpoints"
     priority                   = 120
@@ -65,7 +64,6 @@ resource "azurerm_network_security_group" "app_nsg" {
     destination_address_prefix = azurerm_subnet.endpoint_subnet.address_prefixes[0]
   }
 
-  # Blokiraj sav ostali izlaz (princip najmanjih privilegija)
   security_rule {
     name                       = "deny-all-outbound"
     priority                   = 4095
@@ -78,7 +76,6 @@ resource "azurerm_network_security_group" "app_nsg" {
     destination_address_prefix = "*"
   }
 
-  # (Inbound je po defaultu Deny; eksplicitni deny radi jasnoće)
   security_rule {
     name                       = "deny-all-inbound"
     priority                   = 4096
@@ -92,7 +89,6 @@ resource "azurerm_network_security_group" "app_nsg" {
   }
 }
 
-# NSG za Endpoint podmrežu (dozvoli ulaz s app podmreže na 443)
 resource "azurerm_network_security_group" "endpoint_nsg" {
   name                = "nsg-endpoints-${local.base_name}"
   location            = azurerm_resource_group.rg.location
