@@ -15,6 +15,11 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
 
+    # Run all shell steps inside the terraform/ folder
+    defaults:
+      run:
+        working-directory: terraform
+
     env:
       ARM_USE_OIDC: false
 
@@ -34,7 +39,6 @@ jobs:
 
       - name: Terraform Init
         run: terraform init
-        working-directory: terraform
 
       - name: Terraform Format Check
         run: terraform fmt -check -recursive
@@ -46,28 +50,44 @@ jobs:
         if: github.event_name == 'pull_request'
         run: terraform plan -no-color -out=tfplan.out | tee plan.txt
 
-      - name: Upload Plan Artifact
+      - name: Upload Plan Artifact (PR)
         if: github.event_name == 'pull_request'
         uses: actions/upload-artifact@v4
         with:
           name: tfplan
           path: |
-            plan.txt
-            tfplan.out
+            terraform/plan.txt
+            terraform/tfplan.out
           retention-days: 14
 
       - name: Comment Plan on PR
         if: github.event_name == 'pull_request'
-        uses: mshick/add-pr-comment@v2
+        uses: actions/github-script@v7
         with:
-          message-id: tf-plan
-          message: |
-            **Terraform Plan**:
-            ```
-            ${{ steps.plan.outputs.stdout || '' }}
-            ```
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const path = 'terraform/plan.txt';
+            if (fs.existsSync(path)) {
+              const body = [
+                '**Terraform Plan**:',
+                '```',
+                fs.readFileSync(path, 'utf8').slice(0, 65000), // PR comment size safety
+                '```'
+              ].join('\n');
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.pull_request.number,
+                body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.pull_request.number,
+                body: 'Terraform plan file not found.'
+              });
+            }
 
       - name: Terraform Plan (main)
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
@@ -77,18 +97,18 @@ jobs:
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: terraform apply -auto-approve tfplan.out
 
-      - name: Upload Terraform State
+      - name: Upload Terraform State (main)
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         uses: actions/upload-artifact@v4
         with:
           name: tfstate-main
           path: |
-            terraform.tfstate
-            terraform.tfstate.backup
+            terraform/terraform.tfstate
+            terraform/terraform.tfstate.backup
           retention-days: 30
 
-      # BONUS iz zadatka: post-deploy sample HTML na Web App
-      - name: Deploy Sample Web Page
+      # Post-deploy: upload a simple HTML page to the Web App
+      - name: Deploy Sample Web Page (main)
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: |
           RG_NAME=$(terraform output -raw resource_group_name)
