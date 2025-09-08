@@ -1,26 +1,16 @@
-# terraform/providers.tf
-
 terraform {
-  required_version = ">= 1.0"
+  required_version = ">= 1.9.8"
 
   required_providers {
     azurerm = {
-      source  = "hashicorp/azurerm"
-      version = "~> 3.0"
+      source = "hashicorp/azurerm"
     }
     random = {
-      source  = "hashicorp/random"
-      version = "~> 3.0"
+      source = "hashicorp/random"
     }
   }
 }
 
 provider "azurerm" {
-  features {
-    key_vault {
-      # omogućava čist destroy bez ručnog purge-a
-      purge_soft_delete_on_destroy    = true
-      recover_soft_deleted_key_vaults = true
-    }
-  }
+  features {}
 }
