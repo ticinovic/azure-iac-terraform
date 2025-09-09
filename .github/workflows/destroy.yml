@@ -4,48 +4,67 @@ on:
   workflow_dispatch:
     inputs:
       confirmation:
-        description: 'Upiši: destroy'
+        description: 'Type "destroy" to confirm teardown.'
         required: true
-        default: 'nope'
+        default: 'do-not-destroy'
 
 permissions:
   contents: read
 
 jobs:
   destroy:
-    if: github.event.inputs.confirmation == 'destroy'
+    if: ${{ github.event.inputs.confirmation == 'destroy' }}
     runs-on: ubuntu-latest
     environment: production
+    defaults:
+      run:
+        working-directory: terraform
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Azure login (service principal JSON)
-        uses: azure/login@v2
+      - name: Azure login
+        uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Download state from last successful Deploy run
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          workflow: 'Terraform Deploy'    # must EXACTLY match the deploy workflow name
+          workflow_conclusion: success
+          name: tfstate-main               # must EXACTLY match the artifact name in deploy.yml
+          branch: main
+          path: terraform
+
+      - name: Verify state exists
+        run: |
+          echo "cwd: $(pwd)"
+          ls -la
+          if [ ! -s terraform.tfstate ]; then
+            echo "::error file=terraform.tfstate::terraform.tfstate not found or empty. Re-run Deploy to publish the state artifact, then re-run Destroy."
+            exit 1
+          fi
+          echo "Found terraform.tfstate (size: $(stat -c%s terraform.tfstate) bytes)"
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.9.8
 
-      - name: Terraform Init
-        run: terraform init
+      - name: Terraform Init (no upgrade)
+        run: terraform init -input=false
 
-      - name: Download state artifact from last deploy
-        uses: dawidd6/action-download-artifact@v3
-        with:
-          name: tfstate-main
-          path: .
-          # Ako ima više runova, uzima zadnji sa glavne grane:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Terraform Plan -destroy
+        run: terraform plan -destroy -no-color -input=false -out=destroy.plan
 
-      - name: List files (debug)
-        run: ls -la
+      - name: Fail if nothing to destroy
+        run: |
+          if terraform show -no-color destroy.plan | grep -q 'Plan: 0 to add, 0 to change, 0 to destroy'; then
+            echo "::error::Plan shows 0 to destroy. Likely missing/stale state. Ensure Deploy uploaded the tfstate artifact and rerun Destroy."
+            exit 1
+          fi
 
       - name: Terraform Destroy
-        env:
-          TF_INPUT: 0
-        run: terraform destroy -auto-approve
+        run: terraform apply -auto-approve -input=false destroy.plan

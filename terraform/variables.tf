@@ -1,58 +1,66 @@
+# General
 variable "project_name" {
-  description = "Ime projekta, koristi se u imenovanju resursa."
   type        = string
+  description = "Short project name used in resource names."
   default     = "secureapp"
 }
 
 variable "environment" {
-  description = "Okruženje (npr. dev, test, prod)."
   type        = string
+  description = "Environment (dev/stg/prod)."
   default     = "dev"
 }
 
 variable "location" {
-  description = "Azure regija."
   type        = string
-  default     = "westeurope"
-}
-
-variable "vnet_address_space" {
-  description = "CIDR za VNet."
-  type        = list(string)
-  default     = ["10.0.0.0/16"]
-}
-
-variable "app_subnet_cidr" {
-  description = "CIDR za App Service (VNet Integration) podmrežu."
-  type        = list(string)
-  default     = ["10.0.1.0/24"]
-}
-
-variable "endpoint_subnet_cidr" {
-  description = "CIDR za Private Endpoint podmrežu."
-  type        = list(string)
-  default     = ["10.0.2.0/24"]
-}
-
-variable "app_service_plan_sku" {
-  description = "SKU za App Service Plan (PremiumV2/V3 potreban za VNet Integration)."
-  type        = string
-  default     = "P1v2"
-}
-
-variable "storage_account_name" {
-  description = "Unikatno ime Storage Accounta (3-24 lower alnum)."
-  type        = string
-  default     = null
+  description = "Azure region display name."
+  default     = "West Europe"
 }
 
 variable "tags" {
-  description = "Zajedničke oznake na resursima."
   type        = map(string)
+  description = "Common tags applied to all resources."
   default = {
-    owner       = "iac"
-    environment = "dev"
-    data_class  = "internal"
-    managed_by  = "terraform"
+    project = "Secure Azure IaC"
+    env     = "Development"
   }
+}
+
+# Networking
+variable "vnet_address_space" {
+  type        = list(string)
+  description = "Address space for the VNet."
+  default     = ["10.0.0.0/16"]
+}
+
+variable "app_service_subnet_prefix" {
+  type        = list(string)
+  description = "Address prefix for the App Service integration subnet."
+  default     = ["10.0.1.0/24"]
+}
+
+variable "endpoint_subnet_prefix" {
+  type        = list(string)
+  description = "Address prefix for the Private Endpoints subnet."
+  default     = ["10.0.2.0/24"]
+}
+
+# App Service Plan
+variable "app_service_sku" {
+  type        = string
+  description = "SKU for the App Service Plan (Premium required for VNet integration)."
+  default     = "P1v2"
+}
+
+# Resource names (adjust if you need globally unique values)
+variable "storage_account_name" {
+  type        = string
+  description = "Storage Account name (3–24 chars, [a-z0-9], globally unique)."
+  default     = "stsecureappdev01"
+}
+
+variable "key_vault_name" {
+  type        = string
+  description = "Key Vault name (3–24 chars, [a-z0-9-], globally unique)."
+  default     = "kv-secureapp-dev01"
 }
