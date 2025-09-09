@@ -1,23 +1,39 @@
 ## Terraform Configuration Files
 
-This directory holds all the Terraform code for the project. I've split the configuration into logical files based on the resources they manage, which is a best practice for Infrastructure as Code (IaC).
+This directory contains all **Terraform code** for the project. The configuration is split into logical files based on the resources they manage, following **Infrastructure as Code (IaC) best practices**.
 
-### How the Code is Organized
+### **Project Structure**
 
--   **`providers.tf`**: Declares the required Terraform providers (`azurerm`, `random`) and locks in their versions. This prevents unexpected issues by ensuring a consistent deployment environment.
+The project is organized into **Terraform configuration files** and **workflow files**:
 
--   **`variables.tf`**: Contains all input variables for the project, like `project_name`, `environment`, and `location`. Each variable has a description and a default value, making the code reusable and easy to customize.
+- **`terraform/main.tf`**  
+    *Defines the core resources, including the Azure Resource Group.*
 
--   **`main.tf`**: This is the main entry point. It sets up the core `azurerm_resource_group` that holds everything else and fetches essential Azure client info needed by other resources.
+- **`terraform/variables.tf`**  
+    *Contains input variables (project name, environment, location, etc.) with default values for easy customization.*
 
--   **`network.tf`**: Manages all networking resources. This file creates our secure network boundary, including the `azurerm_virtual_network`, the two specialized subnets (`app_service_subnet` and `endpoint_subnet`), and the `azurerm_network_security_group` for our traffic rules.
+- **`terraform/network.tf`**  
+    *Sets up networking components: the VNet, subnets (with proper delegation and policies), and the NSG with its security rules.*
 
--   **`storage.tf`**: Defines the `azurerm_storage_account` and its `azurerm_private_endpoint`. The key security setting `public_network_access_enabled = false` is set here to keep the storage account off the public internet.
+- **`terraform/storage.tf`**  
+    *Creates the Storage Account (`public_network_access_enabled = false`) and a Private Endpoint in the endpoint subnet for secure access.*
 
--   **`dns.tf`**: Handles the private DNS for the private endpoint. It sets up an `azurerm_private_dns_zone` and links it to the VNet, making sure that requests to the storage account from inside the VNet correctly resolve to its private IP.
+- **`terraform/dns.tf`**  
+    *Configures a Private DNS Zone for the storage account’s private endpoint and links it to the VNet for internal name resolution.*
 
--   **`webapp.tf`**: Defines the `azurerm_service_plan` and the `azurerm_linux_web_app`. It also configures the web app's VNet Integration, which is how it sends outbound traffic into our private network to talk to the storage account.
+- **`terraform/webapp.tf`**  
+    *Deploys the App Service Plan and Web App. Enables VNet Integration (connecting the Web App to the app_service_subnet) and sets Access Restrictions to allow only traffic from the VNet. Also enables a system-managed identity for the Web App.*
 
--   **`keyvault.tf`**: Contains the setup for the `azurerm_key_vault`. This file creates the vault, stores a secret, and sets up an access policy that securely grants the web app's Managed Identity permission to read secrets.
+- **`terraform/keyvault.tf`** *(Optional)*  
+    *Deploys an Azure Key Vault with no public access and a Private Endpoint. Includes an access policy so the Web App’s managed identity can read secrets from the vault.*
 
--   **`outputs.tf`**: Declares the outputs that will be displayed after a successful deployment, like `resource_group_name` and `web_app_hostname`. This gives you quick access to important details about the new infrastructure.
+- **`terraform/outputs.tf`**  
+    *Defines output values (e.g., the resource group name and the Web App’s URL) that Terraform will show after deployment.*
+
+- **`.github/workflows/deploy.yml`**  
+    *GitHub Actions workflow to plan and apply the Terraform deployment. Runs on pushes to the main branch or can be triggered manually. Performs Terraform formatting checks, validation, plans the changes, and applies them if on the main branch (or when manually run).*
+
+- **`.github/workflows/destroy.yml`**  
+    *GitHub Actions workflow to destroy all Terraform-managed resources. This is a manual workflow (triggered via the Actions tab) used for teardown/rollback, requiring a confirmation input (`destroy`) before it runs.*
+
+---
