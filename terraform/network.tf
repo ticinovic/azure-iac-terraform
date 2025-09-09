@@ -7,7 +7,7 @@ resource "azurerm_virtual_network" "main" {
   name                = "vnet-${var.project_name}-${var.environment}"
   location            = azurerm_resource_group.main.location
   resource_group_name = azurerm_resource_group.main.name
-  address_space       = [var.vnet_address_space]
+  address_space       = var.vnet_address_space
   tags                = var.tags
 }
 
@@ -16,7 +16,7 @@ resource "azurerm_subnet" "app_service_subnet" {
   name                 = "snet-appservice"
   resource_group_name  = azurerm_resource_group.main.name
   virtual_network_name = azurerm_virtual_network.main.name
-  address_prefixes     = [var.app_service_subnet_prefix]
+  address_prefixes     = var.app_service_subnet_prefix
 
   delegation {
     name = "appservice-delegation"
@@ -36,7 +36,7 @@ resource "azurerm_subnet" "endpoint_subnet" {
   name                 = "snet-endpoints"
   resource_group_name  = azurerm_resource_group.main.name
   virtual_network_name = azurerm_virtual_network.main.name
-  address_prefixes     = [var.endpoint_subnet_prefix]
+  address_prefixes     = var.endpoint_subnet_prefix
 
   private_endpoint_network_policies = "Disabled"
 }
