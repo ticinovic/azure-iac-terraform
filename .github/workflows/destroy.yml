@@ -32,21 +32,27 @@ jobs:
       - name: Download state from last successful Deploy run
         uses: dawidd6/action-download-artifact@v6
         with:
-          workflow: 'Terraform Deploy'    # must EXACTLY match the deploy workflow name
+          workflow: '.github/workflows/deploy.yml'  # reference the workflow FILE
           workflow_conclusion: success
-          name: tfstate-main               # must EXACTLY match the artifact name in deploy.yml
+          name: tfstate-main                        # must match deploy.yml artifact name
           branch: main
-          path: terraform
+          path: .                                   # download into terraform/ (cwd)
 
-      - name: Verify state exists
+      - name: Locate and verify state
         run: |
           echo "cwd: $(pwd)"
           ls -la
-          if [ ! -s terraform.tfstate ]; then
-            echo "::error file=terraform.tfstate::terraform.tfstate not found or empty. Re-run Deploy to publish the state artifact, then re-run Destroy."
+          FOUND=$(find . -maxdepth 3 -type f -name 'terraform.tfstate' | head -n1 || true)
+          if [ -z "$FOUND" ]; then
+            echo "::error::No terraform.tfstate found in downloaded artifact. Re-run Deploy so it uploads 'tfstate-main', then re-run Destroy."
             exit 1
           fi
-          echo "Found terraform.tfstate (size: $(stat -c%s terraform.tfstate) bytes)"
+          echo "Found state at: $FOUND"
+          if [ "$FOUND" != "./terraform.tfstate" ]; then
+            cp "$FOUND" ./terraform.tfstate
+          fi
+          test -s ./terraform.tfstate
+          echo "State size: $(stat -c%s ./terraform.tfstate) bytes"
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
