@@ -1,14 +1,14 @@
-# Private DNS zone for Storage (Blob)
-resource "azurerm_private_dns_zone" "blob" {
+# Private DNS zone for Storage (blob) Private Endpoint
+resource "azurerm_private_dns_zone" "main" {
   name                = "privatelink.blob.core.windows.net"
-  resource_group_name = azurerm_resource_group.rg.name  # fixed: rg, not main
+  resource_group_name = azurerm_resource_group.main.name
   tags                = var.tags
 }
 
-resource "azurerm_private_dns_zone_virtual_network_link" "blob_link" {
-  name                  = "pdnszlink-blob-${local.base_name}"
-  resource_group_name   = azurerm_resource_group.rg.name
-  private_dns_zone_name = azurerm_private_dns_zone.blob.name
-  virtual_network_id    = azurerm_virtual_network.vnet.id
+resource "azurerm_private_dns_zone_virtual_network_link" "main" {
+  name                  = "pdnsz-vnet-link-${var.project_name}"
+  resource_group_name   = azurerm_resource_group.main.name
+  private_dns_zone_name = azurerm_private_dns_zone.main.name
+  virtual_network_id    = azurerm_virtual_network.main.id
   registration_enabled  = false
 }

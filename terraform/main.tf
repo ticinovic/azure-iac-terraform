@@ -1,10 +1,5 @@
-locals {
-  rg_name   = "rg-${var.project_name}-${var.environment}"
-  base_name = "${var.project_name}-${var.environment}"
-}
-
-resource "azurerm_resource_group" "rg" {
-  name     = local.rg_name
+resource "azurerm_resource_group" "main" {
+  name     = "rg-${var.project_name}-${var.environment}"
   location = var.location
   tags     = var.tags
 }
