@@ -2,7 +2,7 @@
 # network.tf
 ########################################
 
-# VNet
+# Virtual Network
 resource "azurerm_virtual_network" "main" {
   name                = "vnet-${var.project_name}-${var.environment}"
   location            = azurerm_resource_group.main.location
@@ -11,7 +11,7 @@ resource "azurerm_virtual_network" "main" {
   tags                = var.tags
 }
 
-# Subnet za App Service VNet Integration (DODANA DELEGACIJA)
+# Subnet for App Service VNet Integration (with delegation)
 resource "azurerm_subnet" "app_service_subnet" {
   name                 = "snet-appservice"
   resource_group_name  = azurerm_resource_group.main.name
@@ -31,18 +31,17 @@ resource "azurerm_subnet" "app_service_subnet" {
   }
 }
 
-# Subnet za Private Endpoints
+# Subnet for Private Endpoints
 resource "azurerm_subnet" "endpoint_subnet" {
   name                 = "snet-endpoints"
   resource_group_name  = azurerm_resource_group.main.name
   virtual_network_name = azurerm_virtual_network.main.name
   address_prefixes     = var.endpoint_subnet_prefix
 
-  # novi provider atribut
   private_endpoint_network_policies = "Disabled"
 }
 
-# NSG (stroga pravila)
+# Network Security Group (NSG)
 resource "azurerm_network_security_group" "main" {
   name                = "nsg-${var.project_name}-${var.environment}"
   location            = azurerm_resource_group.main.location
@@ -87,7 +86,7 @@ resource "azurerm_network_security_group" "main" {
   tags = var.tags
 }
 
-# Povezivanje NSG na subnet-e
+# Associate NSG with subnets
 resource "azurerm_subnet_network_security_group_association" "app_service" {
   subnet_id                 = azurerm_subnet.app_service_subnet.id
   network_security_group_id = azurerm_network_security_group.main.id

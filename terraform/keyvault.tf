@@ -4,7 +4,7 @@
 
 data "azurerm_client_config" "current" {}
 
-# Key Vault (Access Policies, bez javnog pristupa)
+# Key Vault (Access Policies, no public access)
 resource "azurerm_key_vault" "main" {
   name                = var.key_vault_name
   location            = azurerm_resource_group.main.location
@@ -15,17 +15,16 @@ resource "azurerm_key_vault" "main" {
   soft_delete_retention_days = 7
   purge_protection_enabled   = false
 
-  # KORISTIMO ACCESS POLICIES (NE RBAC ROLE ASSIGNMENT)
-  # => enable_rbac_authorization treba biti false (ili izostavljen)
+  # Use Access Policies (not RBAC)
   enable_rbac_authorization = false
 
-  # Gasi javni pristup
+  # Disable public access
   public_network_access_enabled = false
 
   tags = var.tags
 }
 
-# Private DNS zona za Key Vault
+# Private DNS zone for Key Vault
 resource "azurerm_private_dns_zone" "kv" {
   name                = "privatelink.vaultcore.azure.net"
   resource_group_name = azurerm_resource_group.main.name
@@ -40,7 +39,7 @@ resource "azurerm_private_dns_zone_virtual_network_link" "kv" {
   registration_enabled  = false
 }
 
-# Private Endpoint za Key Vault
+# Private Endpoint for Key Vault
 resource "azurerm_private_endpoint" "kv" {
   name                = "pe-kv-${var.project_name}-${var.environment}"
   location            = azurerm_resource_group.main.location
@@ -62,7 +61,7 @@ resource "azurerm_private_endpoint" "kv" {
   tags = var.tags
 }
 
-# Web App Managed Identity → pravo čitanja tajni (NE RBAC, već Access Policy)
+# Web App Managed Identity → read secrets (Access Policy, not RBAC)
 resource "azurerm_key_vault_access_policy" "webapp" {
   key_vault_id = azurerm_key_vault.main.id
   tenant_id    = data.azurerm_client_config.current.tenant_id

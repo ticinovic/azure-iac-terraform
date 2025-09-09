@@ -1,8 +1,8 @@
 ########################################
-# storage.tf  (private-only + PE + DNS)
+# storage.tf
 ########################################
 
-# Storage Account (no public access)
+# Storage Account (private access only)
 resource "azurerm_storage_account" "main" {
   name                     = var.storage_account_name
   resource_group_name      = azurerm_resource_group.main.name
@@ -12,10 +12,10 @@ resource "azurerm_storage_account" "main" {
   account_kind             = "StorageV2"
   min_tls_version          = "TLS1_2"
 
-  # Close public network access (bool form for azurerm 3.x)
+  # Disable public network access
   public_network_access_enabled = false
 
-  # Optional (kept for clarity even when PNA is off)
+  # Deny by default, allow Azure services
   network_rules {
     default_action = "Deny"
     bypass         = ["AzureServices"]
@@ -24,7 +24,7 @@ resource "azurerm_storage_account" "main" {
   tags = var.tags
 }
 
-# Private Endpoint for Blob (uses blob DNS zone from dns.tf)
+# Private Endpoint for Blob
 resource "azurerm_private_endpoint" "storage" {
   name                = "pe-storage-${var.project_name}-${var.environment}"
   location            = azurerm_resource_group.main.location
@@ -38,9 +38,10 @@ resource "azurerm_private_endpoint" "storage" {
     is_manual_connection           = false
   }
 
+  # Link to blob DNS zone
   private_dns_zone_group {
     name                 = "default"
-    private_dns_zone_ids = [azurerm_private_dns_zone.main.id] # privatelink.blob.core.windows.net (from dns.tf)
+    private_dns_zone_ids = [azurerm_private_dns_zone.main.id]
   }
 
   tags = var.tags

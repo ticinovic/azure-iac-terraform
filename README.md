@@ -68,7 +68,7 @@ az ad sp create-for-rbac --name "github-actions-terraform-sp" --role "Contributo
 
 ### **2. Configure GitHub Secrets**
 
-In your GitHub repository, go to **Settings > Secrets and variables > Actions**, and add:
+In your GitHub repository, go to **Settings > Secrets and variables > Actions > Environment secrets > Create new environment (if don't exists) > Create environment "production"**, and add:
 
 - `ARM_CLIENT_ID` – set to `appId`
 - `ARM_CLIENT_SECRET` – set to `password`

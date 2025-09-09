@@ -7,7 +7,7 @@ This directory contains all **Terraform code** for the project. The configuratio
 The project is organized into **Terraform configuration files** and **workflow files**:
 
 - **`terraform/main.tf`**  
-    *Defines the core resources, including the Azure Resource Group.*
+    *It defines resource group*
 
 - **`terraform/variables.tf`**  
     *Contains input variables (project name, environment, location, etc.) with default values for easy customization.*
