@@ -3,21 +3,30 @@ name: Terraform Destroy
 on:
   workflow_dispatch:
     inputs:
-      confirmation:
-        description: 'Type "destroy" to confirm teardown.'
+      confirm:
+        description: "Type 'destroy' to confirm tearing everything down"
         required: true
-        default: 'do-not-destroy'
+        default: ""
+        type: string
 
+# Needed so this workflow can read artifacts from the Deploy workflow
 permissions:
   contents: read
+  actions: read
 
 jobs:
   destroy:
-    if: ${{ github.event.inputs.confirmation == 'destroy' }}
+    name: terraform
+    if: ${{ github.event.inputs.confirm == 'destroy' }}
     runs-on: ubuntu-latest
     environment: production
+
+    env:
+      TF_IN_AUTOMATION: "true"
+
     defaults:
       run:
+        shell: bash
         working-directory: terraform
 
     steps:
@@ -29,48 +38,40 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Download state from last successful Deploy run
-        uses: dawidd6/action-download-artifact@v6
-        with:
-          workflow: '.github/workflows/deploy.yml'  # reference the workflow FILE
-          workflow_conclusion: success
-          name: tfstate-main                        # must match deploy.yml artifact name
-          branch: main
-          path: .                                   # download into terraform/ (cwd)
-
-      - name: Locate and verify state
-        run: |
-          echo "cwd: $(pwd)"
-          ls -la
-          FOUND=$(find . -maxdepth 3 -type f -name 'terraform.tfstate' | head -n1 || true)
-          if [ -z "$FOUND" ]; then
-            echo "::error::No terraform.tfstate found in downloaded artifact. Re-run Deploy so it uploads 'tfstate-main', then re-run Destroy."
-            exit 1
-          fi
-          echo "Found state at: $FOUND"
-          if [ "$FOUND" != "./terraform.tfstate" ]; then
-            cp "$FOUND" ./terraform.tfstate
-          fi
-          test -s ./terraform.tfstate
-          echo "State size: $(stat -c%s ./terraform.tfstate) bytes"
-
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: 1.9.8
+          terraform_wrapper: false
 
-      - name: Terraform Init (no upgrade)
+      - name: Download state from last successful Deploy run
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          workflow: deploy.yml          # ← the deploy workflow file name
+          workflow_conclusion: success  # last successful run
+          name: tfstate-main            # ← artifact name produced by deploy.yml
+          branch: main
+          path: terraform               # put the state in ./terraform
+
+      - name: Verify state exists
+        run: |
+          echo "Downloaded files:"
+          ls -la
+          test -s terraform.tfstate || { echo "::error ::terraform.tfstate not found. Re-run Deploy first."; exit 1; }
+
+      - name: Terraform init
         run: terraform init -input=false
 
-      - name: Terraform Plan -destroy
-        run: terraform plan -destroy -no-color -input=false -out=destroy.plan
+      - name: Terraform plan (destroy)
+        run: terraform plan -destroy -no-color -input=false -out=tfdestroy.plan
 
-      - name: Fail if nothing to destroy
-        run: |
-          if terraform show -no-color destroy.plan | grep -q 'Plan: 0 to add, 0 to change, 0 to destroy'; then
-            echo "::error::Plan shows 0 to destroy. Likely missing/stale state. Ensure Deploy uploaded the tfstate artifact and rerun Destroy."
-            exit 1
-          fi
+      - name: Upload destroy plan artifact (optional)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-destroy-plan
+          path: terraform/tfdestroy.plan
+          if-no-files-found: ignore
+          retention-days: 7
 
-      - name: Terraform Destroy
-        run: terraform apply -auto-approve -input=false destroy.plan
+      - name: Terraform apply (destroy)
+        run: terraform apply -auto-approve -input=false tfdestroy.plan
