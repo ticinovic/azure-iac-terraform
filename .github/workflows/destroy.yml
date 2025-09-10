@@ -1,6 +1,12 @@
-name: Terraform Destroy
+name: Terraform Destroy (Rollback)
 
 on:
+  # Auto–rollback when you push to the rollback branch
+  push:
+    branches:
+      - rollback-destroy
+
+  # Optional: manual trigger when you're on the rollback branch
   workflow_dispatch:
     inputs:
       confirm:
@@ -9,17 +15,21 @@ on:
         default: ""
         type: string
 
-# Needed so this workflow can read artifacts from the Deploy workflow
+# allow reading artifacts from Deploy workflow
 permissions:
   contents: read
   actions: read
+  id-token: write
 
 jobs:
   destroy:
     name: terraform
-    if: ${{ github.event.inputs.confirm == 'destroy' }}
-    runs-on: ubuntu-latest
     environment: production
+    # Safety: if manual, require confirm='destroy'; if push to rollback-destroy, run.
+    if: |
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.confirm == 'destroy') ||
+      (github.event_name == 'push' && github.ref_name == 'rollback-destroy')
+    runs-on: ubuntu-latest
 
     env:
       TF_IN_AUTOMATION: "true"
@@ -43,20 +53,19 @@ jobs:
         with:
           terraform_wrapper: false
 
-      - name: Download state from last successful Deploy run
+      - name: Download state from last successful Deploy run (main)
         uses: dawidd6/action-download-artifact@v6
         with:
-          workflow: deploy.yml          # ← the deploy workflow file name
-          workflow_conclusion: success  # last successful run
-          name: tfstate-main            # ← artifact name produced by deploy.yml
-          branch: main
-          path: terraform               # put the state in ./terraform
+          workflow: deploy.yml          # file name of your deploy workflow
+          workflow_conclusion: success
+          name: tfstate-main            # artifact name produced in deploy
+          branch: main                  # always destroy resources created from main
+          path: terraform
 
       - name: Verify state exists
         run: |
-          echo "Downloaded files:"
           ls -la
-          test -s terraform.tfstate || { echo "::error ::terraform.tfstate not found. Re-run Deploy first."; exit 1; }
+          test -s terraform.tfstate || { echo "::error ::terraform.tfstate not found. Re-run Deploy on main first."; exit 1; }
 
       - name: Terraform init
         run: terraform init -input=false
@@ -64,7 +73,7 @@ jobs:
       - name: Terraform plan (destroy)
         run: terraform plan -destroy -no-color -input=false -out=tfdestroy.plan
 
-      - name: Upload destroy plan artifact (optional)
+      - name: Upload destroy plan (for audit)
         if: always()
         uses: actions/upload-artifact@v4
         with:
