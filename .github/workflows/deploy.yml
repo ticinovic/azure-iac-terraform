@@ -1,15 +1,16 @@
 name: Terraform Deploy
 
 on:
-  workflow_dispatch: {}
-  pull_request:
-    branches: [ "main" ]
   push:
     branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
 
 permissions:
   contents: read
-  pull-requests: write
+  id-token: write
+  actions: read
 
 jobs:
   terraform:
@@ -17,6 +18,7 @@ jobs:
     environment: production
     defaults:
       run:
+        shell: bash
         working-directory: terraform
 
     steps:
@@ -31,58 +33,97 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: 1.9.8
+          terraform_wrapper: false
 
       - name: Terraform Init
-        run: terraform init -input=false -upgrade
+        run: terraform init -input=false
 
-      - name: Terraform Format (check)
-        run: terraform fmt -check
+      - name: Terraform Format
+        run: terraform fmt -check -recursive
 
       - name: Terraform Validate
         run: terraform validate -no-color
 
       - name: Terraform Plan
+        id: plan
         run: terraform plan -no-color -input=false -out=tfplan
 
-      - name: Save human-readable plan
-        run: terraform show -no-color tfplan > plan.txt
-
-      - name: Upload plan artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: terraform-plan
-          path: terraform/plan.txt
-
-      - name: Comment PR with Plan
-        if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            const plan = fs.readFileSync('terraform/plan.txt','utf8');
-            const text = plan.length > 60000
-              ? "_(truncated to last 60k chars)_\n" + plan.slice(-60000)
-              : plan;
-            const body = "### Terraform Plan\n```hcl\n" + text + "\n```";
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body
-            });
-
-      - name: Terraform Apply (on main)
-        if: (github.ref == 'refs/heads/main') && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+      - name: Terraform Apply (main)
+        if: github.ref == 'refs/heads/main'
         run: terraform apply -auto-approve -input=false tfplan
 
-      - name: Upload Terraform state (artifact)
-        if: (github.ref == 'refs/heads/main') && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+      - name: Save Terraform State (main)
+        if: github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@v4
         with:
           name: tfstate-main
-          path: |
-            terraform/terraform.tfstate
-            terraform/terraform.tfstate.backup
-            terraform/.terraform.lock.hcl
-          retention-days: 14
+          path: terraform/terraform.tfstate
+
+  
+      - name: Negative test (Web App must NOT be public)
+        if: github.ref == 'refs/heads/main' && steps.tfout.outputs.host != ''
+        run: |
+          URL="https://${{ steps.tfout.outputs.host }}"
+          echo "curl $URL (expected to fail/forbid)"
+          set +e
+          CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$URL")
+          set -e
+          echo "HTTP response: $CODE"
+          if [ "$CODE" -eq 200 ]; then
+            echo "::error ::Web App responded 200 OK (publicly reachable)"; exit 1
+          else
+            echo "✅ Negative test passed (not publicly reachable)."
+          fi
+
+      - name: Deploy sample index.html (optional)
+        if: github.ref == 'refs/heads/main' && steps.tfout.outputs.rg != '' && steps.tfout.outputs.host != ''
+        continue-on-error: true
+        run: |
+          RG="${{ steps.tfout.outputs.rg }}"
+          HOST="${{ steps.tfout.outputs.host }}"
+          APP="${HOST%%.azurewebsites.net}"
+          echo "Packaging ./terraform/www"
+          cd ..
+          zip -r app.zip terraform/www >/dev/null
+          echo "Deploying to app '$APP' in RG '$RG'"
+          az webapp deployment source config-zip \
+            --resource-group "$RG" \
+            --name "$APP" \
+            --src app.zip
+
+  positive-test:
+    name: Positive test (inside VNet should be 200)
+    needs: terraform
+    if: ${{ vars.ENABLE_POSITIVE_TEST == 'true' }}
+    runs-on: self-hosted   # your runner placed inside the VNet
+    defaults:
+      run:
+        shell: bash
+        working-directory: terraform
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Curl Web App from inside VNet
+        run: |
+          HOST=$(terraform output -raw web_app_hostname 2>/dev/null)
+          if [ -z "$HOST" ]; then
+            echo "::error ::web_app_hostname output not found"; exit 1
+          fi
+          URL="https://${HOST}"
+          echo "Testing from inside VNet: $URL"
+          set +e
+          CODE=$(curl -s -o /dev/null -w "%{http_code}" "$URL")
+          set -e
+          echo "HTTP response: $CODE"
+          if [ "$CODE" -ne 200 ]; then
+            echo "::error ::Expected 200 from inside VNet, got $CODE"
+            exit 1
+          fi
+          echo "✅ Positive test passed (reachable from inside VNet)."
