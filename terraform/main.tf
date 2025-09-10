@@ -28,21 +28,22 @@ resource "random_string" "suffix" {
   numeric = true
 }
 
-# Compose/sanitize names
+# Compose/sanitize names (avoid regexreplace for compatibility)
 locals {
-  proj_slim = lower(regexreplace(var.project_name, "[^a-z0-9]", ""))
-  env_slim  = lower(regexreplace(var.environment, "[^a-z0-9]", ""))
+  # strip a few common non-alphanumerics and lowercase
+  proj_slim = lower(replace(replace(replace(var.project_name, "-", ""), "_", ""), " ", ""))
+  env_slim  = lower(replace(replace(replace(var.environment, "-", ""), "_", ""), " ", ""))
 
   # Resource Group name (allow override)
   rg_name = coalesce(var.resource_group_name, "rg-${var.project_name}-${var.environment}")
 
-  # Storage: 3-24 lower alphanum only
+  # Storage: 3-24 lower alphanum only (prefix with 'st', trim if needed)
   sa_composed = "st${local.proj_slim}${local.env_slim}${random_string.suffix.result}"
-  sa_name     = coalesce(var.storage_account_name, substr(local.sa_composed, 0, 24))
+  sa_name     = coalesce(var.storage_account_name, substr(sa_composed, 0, 24))
 
-  # Key Vault: keep within length limits
+  # Key Vault: keep short; kv allows hyphens but keep compact/valid
   kv_composed = "kv-${local.proj_slim}-${local.env_slim}-${random_string.suffix.result}"
-  kv_name     = coalesce(var.key_vault_name, substr(local.kv_composed, 0, 24))
+  kv_name     = coalesce(var.key_vault_name, substr(kv_composed, 0, 24))
 }
 
 # Resource Group
