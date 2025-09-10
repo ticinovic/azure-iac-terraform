@@ -59,8 +59,28 @@ jobs:
           name: tfstate-main
           path: terraform/terraform.tfstate
 
+      - name: Read Terraform outputs
+        id: tfout
+        run: |
+          set +e
+          JSON=$(terraform output -json 2>/dev/null)
+          EXIT_CODE=$?
+          set -e
+          if [ $EXIT_CODE -ne 0 ] || [ -z "$JSON" ]; then
+          # Expected Terraform output variable names: resource_group_name, web_app_hostname
+          # If you change these output names in your Terraform code, update the jq queries below.
+          RESOURCE_GROUP_NAME=$(echo "$JSON"   | jq -r '.resource_group_name.value // empty')
+          HOST=$(echo "$JSON" | jq -r '.web_app_hostname.value // empty')
+          echo "Terraform outputs JSON:"
+          echo "$JSON"
+          RESOURCE_GROUP_NAME=$(echo "$JSON"   | jq -r '.resource_group_name.value // empty')
+          HOST=$(echo "$JSON" | jq -r '.web_app_hostname.value // empty')
+          echo "resource_group_name=$RESOURCE_GROUP_NAME" >> "$GITHUB_OUTPUT"
+          echo "host=$HOST" >> "$GITHUB_OUTPUT"
+          echo "Resource Group Name: $RESOURCE_GROUP_NAME"
+          echo "Web App Hostname: $HOST"
   
-      - name: Negative test (Web App must NOT be public)
+      - name: Test Web App is NOT publicly reachable (negative test)
         if: github.ref == 'refs/heads/main' && steps.tfout.outputs.host != ''
         run: |
           URL="https://${{ steps.tfout.outputs.host }}"
@@ -75,19 +95,19 @@ jobs:
             echo "✅ Negative test passed (not publicly reachable)."
           fi
 
-      - name: Deploy sample index.html (optional)
-        if: github.ref == 'refs/heads/main' && steps.tfout.outputs.rg != '' && steps.tfout.outputs.host != ''
+      - name: Deploy sample index.html to Web App
+        if: github.ref == 'refs/heads/main' && steps.tfout.outputs.resource_group_name != '' && steps.tfout.outputs.host != ''
         continue-on-error: true
         run: |
-          RG="${{ steps.tfout.outputs.rg }}"
+          RESOURCE_GROUP_NAME="${{ steps.tfout.outputs.resource_group_name }}"
           HOST="${{ steps.tfout.outputs.host }}"
           APP="${HOST%%.azurewebsites.net}"
           echo "Packaging ./terraform/www"
           cd ..
           zip -r app.zip terraform/www >/dev/null
-          echo "Deploying to app '$APP' in RG '$RG'"
+          echo "Deploying to app '$APP' in RG '$RESOURCE_GROUP_NAME'"
           az webapp deployment source config-zip \
-            --resource-group "$RG" \
+            --resource-group "$RESOURCE_GROUP_NAME" \
             --name "$APP" \
             --src app.zip
 
