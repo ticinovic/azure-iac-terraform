@@ -1,14 +1,9 @@
 terraform {
-  required_version = ">= 1.5.0"
-
+  required_version = ">= 1.4.0"
   required_providers {
     azurerm = {
       source  = "hashicorp/azurerm"
       version = "~> 3.100"
-    }
-    random = {
-      source  = "hashicorp/random"
-      version = "~> 3.6"
     }
   }
 }
@@ -17,77 +12,47 @@ provider "azurerm" {
   features {}
 }
 
-# Top-level data source (NOT inside provider)
 data "azurerm_client_config" "current" {}
-
-# Short suffix for globally-unique names (storage/kv)
-resource "random_string" "suffix" {
-  length  = 6
-  upper   = false
-  special = false
-  numeric = true
-}
-
-# Compose/sanitize names (avoid regexreplace for compatibility)
-locals {
-  # strip a few common non-alphanumerics and lowercase
-  proj_slim = lower(replace(replace(replace(var.project_name, "-", ""), "_", ""), " ", ""))
-  env_slim  = lower(replace(replace(replace(var.environment, "-", ""), "_", ""), " ", ""))
-
-  # Resource Group name (allow override)
-  rg_name = coalesce(var.resource_group_name, "rg-${var.project_name}-${var.environment}")
-
-  # Storage: 3-24 lower alphanum only (prefix with 'st', trim if needed)
-  sa_composed = "st${local.proj_slim}${local.env_slim}${random_string.suffix.result}"
-  sa_name     = coalesce(var.storage_account_name, substr(sa_composed, 0, 24))
-
-  # Key Vault: keep short; kv allows hyphens but keep compact/valid
-  kv_composed = "kv-${local.proj_slim}-${local.env_slim}-${random_string.suffix.result}"
-  kv_name     = coalesce(var.key_vault_name, substr(kv_composed, 0, 24))
-}
 
 # Resource Group
 resource "azurerm_resource_group" "main" {
-  name     = local.rg_name
+  name     = var.resource_group_name
   location = var.location
   tags     = var.tags
 }
 
-# ─────────────────────────────────────────────────────────
-# Modules
-# ─────────────────────────────────────────────────────────
-
+# NETWORK
 module "network" {
   source                  = "./modules/network"
   resource_group_name     = azurerm_resource_group.main.name
-  location                = azurerm_resource_group.main.location
-  project_name            = var.project_name
-  environment             = var.environment
-  address_space           = var.address_space
+  location                = var.location
+  vnet_name               = var.vnet_name
   app_service_subnet_cidr = var.app_service_subnet_cidr
   endpoint_subnet_cidr    = var.endpoint_subnet_cidr
+  nsg_name                = var.nsg_name
   tags                    = var.tags
 }
 
 module "webapp" {
-  source                = "./modules/webapp"
-  resource_group_name   = azurerm_resource_group.main.name
-  location              = azurerm_resource_group.main.location
-  project_name          = var.project_name
-  environment           = var.environment
-  runtime_stack         = var.runtime_stack
-  app_service_sku       = var.app_service_sku
+  source              = "./modules/webapp"
+  resource_group_name = azurerm_resource_group.main.name
+  location            = var.location
+
+  service_plan_name = var.service_plan_name
+  app_service_sku   = var.app_service_sku
+  web_app_name      = var.web_app_name
+  runtime_stack     = var.runtime_stack
+
   app_service_subnet_id = module.network.app_service_subnet_id
   tags                  = var.tags
 }
 
+# STORAGE
 module "storage" {
   source               = "./modules/storage"
   resource_group_name  = azurerm_resource_group.main.name
-  location             = azurerm_resource_group.main.location
-  project_name         = var.project_name
-  environment          = var.environment
-  storage_account_name = local.sa_name
+  location             = var.location
+  storage_account_name = var.storage_account_name
   vnet_id              = module.network.vnet_id
   endpoint_subnet_id   = module.network.endpoint_subnet_id
   tags                 = var.tags
@@ -96,10 +61,8 @@ module "storage" {
 module "keyvault" {
   source              = "./modules/keyvault"
   resource_group_name = azurerm_resource_group.main.name
-  location            = azurerm_resource_group.main.location
-  project_name        = var.project_name
-  environment         = var.environment
-  key_vault_name      = local.kv_name
+  location            = var.location
+  key_vault_name      = var.key_vault_name
   tenant_id           = data.azurerm_client_config.current.tenant_id
   vnet_id             = module.network.vnet_id
   endpoint_subnet_id  = module.network.endpoint_subnet_id

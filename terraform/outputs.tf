@@ -3,6 +3,6 @@ output "resource_group_name" {
 }
 
 output "web_app_hostname" {
-  description = "Default hostname of the deployed Web App"
   value       = module.webapp.default_hostname
+  description = "Default hostname of the deployed Web App"
 }

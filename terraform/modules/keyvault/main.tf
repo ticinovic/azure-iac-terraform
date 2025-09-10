@@ -11,6 +11,16 @@ resource "azurerm_key_vault" "main" {
   tags                          = var.tags
 }
 
+# Web App MI → read secrets (no secrets created by TF)
+resource "azurerm_key_vault_access_policy" "webapp" {
+  key_vault_id = azurerm_key_vault.main.id
+  tenant_id    = var.tenant_id
+  object_id    = var.webapp_principal_id
+
+  secret_permissions = ["Get", "List"]
+}
+
+# Private DNS for Key Vault
 resource "azurerm_private_dns_zone" "kv" {
   name                = "privatelink.vaultcore.azure.net"
   resource_group_name = var.resource_group_name
@@ -18,20 +28,22 @@ resource "azurerm_private_dns_zone" "kv" {
 }
 
 resource "azurerm_private_dns_zone_virtual_network_link" "kv" {
-  name                  = "pdnsz-kv-vnet-link-${var.project_name}"
+  name                  = "pdnsz-kv-link"
   resource_group_name   = var.resource_group_name
   private_dns_zone_name = azurerm_private_dns_zone.kv.name
   virtual_network_id    = var.vnet_id
 }
 
+# Private Endpoint for Key Vault
 resource "azurerm_private_endpoint" "kv" {
-  name                = "pe-kv-${var.project_name}-${var.environment}"
+  name                = "pe-kv"
   location            = var.location
   resource_group_name = var.resource_group_name
   subnet_id           = var.endpoint_subnet_id
+  tags                = var.tags
 
   private_service_connection {
-    name                           = "psc-kv-${var.project_name}-${var.environment}"
+    name                           = "psc-kv"
     private_connection_resource_id = azurerm_key_vault.main.id
     subresource_names              = ["vault"]
     is_manual_connection           = false
@@ -41,14 +53,4 @@ resource "azurerm_private_endpoint" "kv" {
     name                 = "default"
     private_dns_zone_ids = [azurerm_private_dns_zone.kv.id]
   }
-
-  tags = var.tags
-}
-
-resource "azurerm_key_vault_access_policy" "webapp" {
-  key_vault_id = azurerm_key_vault.main.id
-  tenant_id    = var.tenant_id
-  object_id    = var.webapp_principal_id
-
-  secret_permissions = ["Get", "List"]
 }

@@ -1,23 +1,20 @@
-# modules/network/main.tf
-
 resource "azurerm_virtual_network" "main" {
-  name                = "vnet-${var.project_name}-${var.environment}"
+  name                = var.vnet_name
   location            = var.location
   resource_group_name = var.resource_group_name
-  address_space       = var.address_space
+  address_space       = ["10.10.0.0/16"]
   tags                = var.tags
 }
 
 resource "azurerm_network_security_group" "main" {
-  name                = "nsg-${var.project_name}-${var.environment}"
+  name                = var.nsg_name
   location            = var.location
   resource_group_name = var.resource_group_name
   tags                = var.tags
 }
 
-# App Service delegated subnet
 resource "azurerm_subnet" "app_service" {
-  name                 = "snet-appsvc-${var.project_name}"
+  name                 = "snet-appsvc"
   resource_group_name  = var.resource_group_name
   virtual_network_name = azurerm_virtual_network.main.name
   address_prefixes     = [var.app_service_subnet_cidr]
@@ -31,18 +28,14 @@ resource "azurerm_subnet" "app_service" {
   }
 }
 
-# Endpoint subnet (for Private Endpoints)
 resource "azurerm_subnet" "endpoint" {
-  name                 = "snet-endpoints-${var.project_name}"
-  resource_group_name  = var.resource_group_name
-  virtual_network_name = azurerm_virtual_network.main.name
-  address_prefixes     = [var.endpoint_subnet_cidr]
-
-  # DEPRECATION FIX: use string property instead of *_enabled = true/false
-  private_endpoint_network_policies = "Enabled" # or "Disabled" if you want to disable them
+  name                              = "snet-endpoints"
+  resource_group_name               = var.resource_group_name
+  virtual_network_name              = azurerm_virtual_network.main.name
+  address_prefixes                  = [var.endpoint_subnet_cidr]
+  private_endpoint_network_policies = "Enabled"
 }
 
-# Associate NSG to subnets (adjust/add rules in this NSG as you need)
 resource "azurerm_subnet_network_security_group_association" "appsvc" {
   subnet_id                 = azurerm_subnet.app_service.id
   network_security_group_id = azurerm_network_security_group.main.id
