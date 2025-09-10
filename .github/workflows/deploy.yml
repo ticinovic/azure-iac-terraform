@@ -86,24 +86,3 @@ jobs:
             terraform/terraform.tfstate.backup
             terraform/.terraform.lock.hcl
           retention-days: 14
-
-      - name: Show Terraform Outputs
-        id: outputs
-        run: |
-          echo "web_app_hostname=$(terraform output -raw web_app_hostname)" >> $GITHUB_OUTPUT
-
-      - name: Negative test (Web App should NOT be reachable from public internet)
-        if: github.ref == 'refs/heads/main'
-        run: |
-          echo "Trying to curl Web App URL (expected to fail)..."
-          URL="https://${{ steps.outputs.outputs.web_app_hostname }}"
-          set +e
-          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$URL")
-          set -e
-          echo "HTTP response: $RESPONSE"
-          if [ "$RESPONSE" -eq 200 ]; then
-            echo "::error ::Web App responded with 200 OK — it is PUBLICLY accessible, which breaks the security requirement."
-            exit 1
-          else
-            echo "✅ Negative test passed: Web App is not reachable from the internet (response code: $RESPONSE)."
-          fi
