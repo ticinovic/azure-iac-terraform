@@ -16,6 +16,9 @@ jobs:
   terraform:
     runs-on: ubuntu-latest
     environment: production
+    # <-- CHANGE: Add an 'outputs' section to pass data to other jobs
+    outputs:
+      web_app_hostname: ${{ steps.tfout.outputs.web_app_hostname }}
     defaults:
       run:
         shell: bash
@@ -51,41 +54,48 @@ jobs:
       - name: Terraform Apply (main)
         if: github.ref == 'refs/heads/main'
         run: terraform apply -auto-approve -input=false tfplan
-
-      - name: Save Terraform State (main)
+      
+      # <-- CHANGE: New step to get Terraform outputs after applying
+      - name: Get Terraform Outputs
         if: github.ref == 'refs/heads/main'
-        uses: actions/upload-artifact@v4
-        with:
-          name: tfstate-main
-          path: terraform/terraform.tfstate
+        id: tfout
+        run: |
+          echo "resource_group_name=$(terraform output -raw resource_group_name)" >> $GITHUB_OUTPUT
+          echo "web_app_hostname=$(terraform output -raw web_app_hostname)" >> $GITHUB_OUTPUT
 
       - name: Deploy sample index.html to Web App
-        if: github.ref == 'refs/heads/main' && steps.tfout.outputs.resource_group_name != '' && steps.tfout.outputs.host != ''
-        continue-on-error: true
+        # <-- CHANGE: Updated condition to use the correct step ID and output name
+        if: github.ref == 'refs/heads/main' && steps.tfout.outputs.resource_group_name != '' && steps.tfout.outputs.web_app_hostname != ''
         run: |
+          # <-- CHANGE: Updated variables to use the correct step outputs
           RESOURCE_GROUP_NAME="${{ steps.tfout.outputs.resource_group_name }}"
-          HOST="${{ steps.tfout.outputs.host }}"
+          HOST="${{ steps.tfout.outputs.web_app_hostname }}"
           APP="${HOST%%.azurewebsites.net}"
           echo "Packaging ./terraform/www"
-          cd ..
+          # Go to the root of the repo to create the zip correctly
+          cd ${{ github.workspace }}
           zip -r app.zip terraform/www >/dev/null
           echo "Deploying to app '$APP' in RG '$RESOURCE_GROUP_NAME'"
           az webapp deployment source config-zip \
             --resource-group "$RESOURCE_GROUP_NAME" \
             --name "$APP" \
             --src app.zip
+      
+      # Note: Saving state as an artifact is fine, but not needed for the 'positive-test' job with these changes.
 
   positive-test:
     name: Positive test (inside VNet should be 200)
     needs: terraform
-    if: ${{ vars.ENABLE_POSITIVE_TEST == 'true' }}
-    runs-on: self-hosted   # your runner placed inside the VNet
+    # This job will only run if the repository variable 'ENABLE_POSITIVE_TEST' is set to 'true'
+    if: github.ref == 'refs/heads/main' && needs.terraform.outputs.web_app_hostname != '' && vars.ENABLE_POSITIVE_TEST == 'true'
+    runs-on: self-hosted # your runner placed inside the VNet
     defaults:
       run:
         shell: bash
-        working-directory: terraform
 
     steps:
+      # Note: Checkout and Azure Login are not strictly required for this test anymore,
+      # but are good practice to keep if you add more steps later.
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -96,15 +106,21 @@ jobs:
 
       - name: Curl Web App from inside VNet
         run: |
-          HOST=$(terraform output -raw web_app_hostname 2>/dev/null)
+          # <-- CHANGE: Get hostname directly from the previous job's output
+          HOST="${{ needs.terraform.outputs.web_app_hostname }}"
+          
           if [ -z "$HOST" ]; then
-            echo "::error ::web_app_hostname output not found"; exit 1
+            echo "::error ::web_app_hostname output not received from terraform job"; exit 1
           fi
+          
           URL="https://${HOST}"
           echo "Testing from inside VNet: $URL"
+          
+          # Allow the curl command to fail without stopping the script
           set +e
           CODE=$(curl -s -o /dev/null -w "%{http_code}" "$URL")
           set -e
+          
           echo "HTTP response: $CODE"
           if [ "$CODE" -ne 200 ]; then
             echo "::error ::Expected 200 from inside VNet, got $CODE"
