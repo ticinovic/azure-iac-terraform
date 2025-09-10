@@ -39,14 +39,14 @@ resource "azurerm_app_service_virtual_network_swift_connection" "this" {
 
 # Access Restrictions (deny public)
 resource "azurerm_app_service_access_restriction" "deny_all_public" {
-  priority                = 2147483647
-  name                    = "deny-public"
-  action                  = "Deny"
-  ip_address              = "0.0.0.0/0"
-  http_headers            = []
-  scm_site                = true
+  priority                      = 2147483647
+  name                          = "deny-public"
+  action                        = "Deny"
+  ip_address                    = "0.0.0.0/0"
+  http_headers                  = []
+  scm_site                      = true
   use_same_restrictions_for_scm = true
 
-  webapp_name             = azurerm_linux_web_app.main.name
-  resource_group_name     = var.resource_group_name
+  webapp_name         = azurerm_linux_web_app.main.name
+  resource_group_name = var.resource_group_name
 }
