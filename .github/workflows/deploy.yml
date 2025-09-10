@@ -59,19 +59,7 @@ jobs:
           name: tfstate-main
           path: terraform/terraform.tfstate
 
-
-      - name: Read Terraform outputs (tolerant)
-        id: tfout
-        run: |
-          set +e
-          RG=$(terraform output -raw resource_group_name 2>/dev/null)
-          HOST=$(terraform output -raw web_app_hostname 2>/dev/null)
-          set -e
-          echo "rg=${RG}"   >> "$GITHUB_OUTPUT"
-          echo "host=${HOST}" >> "$GITHUB_OUTPUT"
-          echo "RG=${RG}"
-          echo "HOST=${HOST}"
-
+  
       - name: Negative test (Web App must NOT be public)
         if: github.ref == 'refs/heads/main' && steps.tfout.outputs.host != ''
         run: |
