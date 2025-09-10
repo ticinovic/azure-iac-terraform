@@ -5,23 +5,53 @@ terraform {
       source  = "hashicorp/azurerm"
       version = "~> 3.100"
     }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.6"
+    }
   }
 }
 
-provider "azurerm" {
-  features {}
-}
+provider "azurerm" { features {} }
 
 data "azurerm_client_config" "current" {}
 
-# Resource Group (keep RG in root for clarity)
+# Short suffix for globally-unique names (storage/kv)
+resource "random_string" "suffix" {
+  length  = 6
+  upper   = false
+  special = false
+  numeric = true
+}
+
+# Sanitize/compose names
+locals {
+  proj_slim = lower(regexreplace(var.project_name, "[^a-z0-9]", ""))
+  env_slim  = lower(regexreplace(var.environment,  "[^a-z0-9]", ""))
+
+  # RG: allow override
+  rg_name = coalesce(var.resource_group_name, "rg-${var.project_name}-${var.environment}")
+
+  # Storage: 3-24 lower alphanum only. Prefix with 'st', then trim.
+  sa_composed = "st${local.proj_slim}${local.env_slim}${random_string.suffix.result}"
+  sa_name     = coalesce(var.storage_account_name, substr(local.sa_composed, 0, 24))
+
+  # Key Vault: keep short; kv names allow hyphens but keep it compact
+  kv_composed = "kv-${local.proj_slim}-${local.env_slim}-${random_string.suffix.result}"
+  kv_name     = coalesce(var.key_vault_name, substr(local.kv_composed, 0, 24))
+}
+
+# Resource Group kept in root
 resource "azurerm_resource_group" "main" {
-  name     = var.resource_group_name
+  name     = local.rg_name
   location = var.location
   tags     = var.tags
 }
 
-# ── Network (VNet, subnets, NSG)
+# ─────────────────────────────────────────────────────────
+# Modules
+# ─────────────────────────────────────────────────────────
+
 module "network" {
   source                  = "./modules/network"
   resource_group_name     = azurerm_resource_group.main.name
@@ -34,7 +64,6 @@ module "network" {
   tags                    = var.tags
 }
 
-# ── Web App (Plan + App Service, VNet Integration)
 module "webapp" {
   source                = "./modules/webapp"
   resource_group_name   = azurerm_resource_group.main.name
@@ -47,30 +76,28 @@ module "webapp" {
   tags                  = var.tags
 }
 
-# ── Storage (Account + Private Endpoint + Private DNS)
 module "storage" {
   source               = "./modules/storage"
   resource_group_name  = azurerm_resource_group.main.name
   location             = azurerm_resource_group.main.location
   project_name         = var.project_name
   environment          = var.environment
-  storage_account_name = var.storage_account_name
+  storage_account_name = local.sa_name
   vnet_id              = module.network.vnet_id
   endpoint_subnet_id   = module.network.endpoint_subnet_id
   tags                 = var.tags
 }
 
-# ── Key Vault (Private only + PE + Access Policy for Web App MI)
 module "keyvault" {
-  source              = "./modules/keyvault"
-  resource_group_name = azurerm_resource_group.main.name
-  location            = azurerm_resource_group.main.location
-  project_name        = var.project_name
-  environment         = var.environment
-  key_vault_name      = var.key_vault_name
-  tenant_id           = data.azurerm_client_config.current.tenant_id
-  vnet_id             = module.network.vnet_id
-  endpoint_subnet_id  = module.network.endpoint_subnet_id
-  webapp_principal_id = module.webapp.principal_id
-  tags                = var.tags
+  source               = "./modules/keyvault"
+  resource_group_name  = azurerm_resource_group.main.name
+  location             = azurerm_resource_group.main.location
+  project_name         = var.project_name
+  environment          = var.environment
+  key_vault_name       = local.kv_name
+  tenant_id            = data.azurerm_client_config.current.tenant_id
+  vnet_id              = module.network.vnet_id
+  endpoint_subnet_id   = module.network.endpoint_subnet_id
+  webapp_principal_id  = module.webapp.principal_id
+  tags                 = var.tags
 }
