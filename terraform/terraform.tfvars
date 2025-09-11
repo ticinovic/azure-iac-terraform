@@ -14,7 +14,6 @@ endpoint_subnet_cidr    = "10.10.2.0/24"
 service_plan_name = "asp-secureapp-dev"
 app_service_sku   = "P1v2"
 web_app_name      = "app-secureapp-dev"
-runtime_stack     = "NODE|18-lts"
 
 # Storage
 storage_account_name = "stsecureappdev1234" # must be 3-24 chars, lowercase alphanum
@@ -27,3 +26,5 @@ tags = {
   environment = "dev"
   project     = "secureapp"
 }
+# Azure Container Registry (ACR)
+acr_name = "acrsecureappdev123"

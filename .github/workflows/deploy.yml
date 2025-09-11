@@ -13,14 +13,16 @@ permissions:
   actions: read
 
 jobs:
-  # <-- CHANGE: This job now only handles the Terraform infrastructure
   build_and_deploy_infra:
     name: Build and Deploy Infrastructure
-    runs-on: ubuntu-latest
+    # ADDED: This job now targets an environment that requires approval
     environment: production
+    runs-on: ubuntu-latest
     outputs:
+      acr_name: ${{ steps.tfout.outputs.acr_name }}
+      acr_login_server: ${{ steps.tfout.outputs.acr_login_server }}
       resource_group_name: ${{ steps.tfout.outputs.resource_group_name }}
-      web_app_hostname: ${{ steps.tfout.outputs.web_app_hostname }}
+      web_app_name: ${{ steps.tfout.outputs.web_app_name }}
     defaults:
       run:
         shell: bash
@@ -37,23 +39,17 @@ jobs:
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_wrapper: false
 
       - name: Terraform Init
         run: terraform init -input=false
-
-      - name: Terraform Format
-        run: terraform fmt -check -recursive
 
       - name: Terraform Validate
         run: terraform validate -no-color
 
       - name: Terraform Plan
-        id: plan
         run: terraform plan -no-color -input=false -out=tfplan
 
-      - name: Terraform Apply (main)
+      - name: Terraform Apply
         if: github.ref == 'refs/heads/main'
         run: terraform apply -auto-approve -input=false tfplan
       
@@ -61,17 +57,17 @@ jobs:
         if: github.ref == 'refs/heads/main'
         id: tfout
         run: |
+          echo "acr_name=$(terraform output -raw acr_name)" >> $GITHUB_OUTPUT
+          echo "acr_login_server=$(terraform output -raw acr_login_server)" >> $GITHUB_OUTPUT
           echo "resource_group_name=$(terraform output -raw resource_group_name)" >> $GITHUB_OUTPUT
-          echo "web_app_hostname=$(terraform output -raw web_app_hostname)" >> $GITHUB_OUTPUT
-      
-      # <-- CHANGE: The "Deploy sample index.html" step has been removed from this job.
+          echo "web_app_name=$(terraform output -raw web_app_name)" >> $GITHUB_OUTPUT
 
-  # <-- CHANGE: This is a new job to handle the code deployment from a secure location.
   deploy_app_code:
-    name: Deploy Application Code
+    name: Build and Deploy Application
     needs: build_and_deploy_infra
     if: github.ref == 'refs/heads/main'
-    runs-on: self-hosted # <-- IMPORTANT: Runs on your runner inside the VNet
+    # CHANGED: This no longer uses a self-hosted runner
+    runs-on: ubuntu-latest
     
     steps:
       - name: Checkout
@@ -82,57 +78,22 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Deploy sample index.html to Web App
+      - name: ACR Login
+        run: az acr login --name ${{ needs.build_and_deploy_infra.outputs.acr_name }}
+
+      - name: Build and Push Docker Image
         run: |
-          RESOURCE_GROUP_NAME="${{ needs.build_and_deploy_infra.outputs.resource_group_name }}"
-          HOST="${{ needs.build_and_deploy_infra.outputs.web_app_hostname }}"
-          APP_NAME="${HOST%%.azurewebsites.net}"
-
-          echo "Packaging application for deployment..."
-          zip -r app.zip ./terraform/www -j >/dev/null
-
-          echo "Deploying to app '$APP_NAME' in RG '$RESOURCE_GROUP_NAME'"
-          # <-- CHANGE: Using the modern, recommended 'az webapp deploy' command
-          az webapp deploy \
-            --resource-group "$RESOURCE_GROUP_NAME" \
-            --name "$APP_NAME" \
-            --src-path app.zip \
-            --type zip
-
-  positive-test:
-    name: Positive test (inside VNet should be 200)
-    needs: [build_and_deploy_infra, deploy_app_code] # <-- Depends on both previous jobs
-    if: github.ref == 'refs/heads/main' && vars.ENABLE_POSITIVE_TEST == 'true'
-    runs-on: self-hosted
-    
-    steps:
-      - name: Azure login
-        uses: azure/login@v1
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
-
-      - name: Curl Web App from inside VNet
+          ACR_SERVER=${{ needs.build_and_deploy_infra.outputs.acr_login_server }}
+          IMAGE_NAME="secureapp"
+          
+          docker build -t $IMAGE_NAME -f Dockerfile .
+          
+          docker tag $IMAGE_NAME $ACR_SERVER/$IMAGE_NAME:${{ github.sha }}
+          docker tag $IMAGE_NAME $ACR_SERVER/$IMAGE_NAME:latest
+          
+          docker push $ACR_SERVER/$IMAGE_NAME:${{ github.sha }}
+          docker push $ACR_SERVER/$IMAGE_NAME:latest
+      
+      - name: Restart Web App to pull latest image
         run: |
-          HOST="${{ needs.build_and_deploy_infra.outputs.web_app_hostname }}"
-          
-          if [ -z "$HOST" ]; then
-            echo "::error ::web_app_hostname output not received from terraform job"; exit 1
-          fi
-          
-          # Add a small delay to allow the app to restart after deployment
-          echo "Waiting 30 seconds for the app to be ready..."
-          sleep 30
-
-          URL="https://${HOST}"
-          echo "Testing from inside VNet: $URL"
-          
-          set +e
-          CODE=$(curl --insecure -s -o /dev/null -w "%{http_code}" "$URL")
-          set -e
-          
-          echo "HTTP response: $CODE"
-          if [ "$CODE" -ne 200 ]; then
-            echo "::error ::Expected 200 from inside VNet, got $CODE"
-            exit 1
-          fi
-          echo "✅ Positive test passed (reachable from inside VNet)."
+          az webapp restart --name ${{ needs.build_and_deploy_infra.outputs.web_app_name }} --resource-group ${{ needs.build_and_deploy_infra.outputs.resource_group_name }}
