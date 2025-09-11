@@ -34,17 +34,19 @@ module "network" {
 }
 
 module "webapp" {
-  source              = "./modules/webapp"
-  resource_group_name = azurerm_resource_group.main.name
-  location            = var.location
+  source = "./modules/webapp"
 
-  service_plan_name = var.service_plan_name
-  app_service_sku   = var.app_service_sku
-  web_app_name      = var.web_app_name
-  runtime_stack     = var.runtime_stack
-
+  web_app_name          = var.web_app_name
+  resource_group_name   = azurerm_resource_group.main.name
+  location              = azurerm_resource_group.main.location
+  service_plan_name     = var.service_plan_name
+  app_service_sku       = var.app_service_sku
   app_service_subnet_id = module.network.app_service_subnet_id
   tags                  = var.tags
+
+  acr_login_server   = azurerm_container_registry.acr.login_server
+  acr_admin_username = azurerm_container_registry.acr.admin_username
+  acr_admin_password = azurerm_container_registry.acr.admin_password
 }
 
 # STORAGE
