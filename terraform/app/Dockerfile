@@ -1,2 +1,4 @@
+# terraform/app/Dockerfile
 FROM nginx:alpine
-COPY ./www/ /usr/share/nginx/html
+COPY webroot/ /usr/share/nginx/html/
+EXPOSE 80

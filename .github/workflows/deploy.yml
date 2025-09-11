@@ -86,7 +86,7 @@ jobs:
           ACR_SERVER=${{ needs.build_and_deploy_infra.outputs.acr_login_server }}
           IMAGE_NAME="secureapp"
           
-          docker build -t $IMAGE_NAME -f Dockerfile .
+          docker build -t $IMAGE_NAME -f terraform/app/Dockerfile terraform/app
           
           docker tag $IMAGE_NAME $ACR_SERVER/$IMAGE_NAME:${{ github.sha }}
           docker tag $IMAGE_NAME $ACR_SERVER/$IMAGE_NAME:latest
