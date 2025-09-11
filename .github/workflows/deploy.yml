@@ -9,13 +9,13 @@ on:
 
 permissions:
   contents: read
-  id-token: write       # required for OIDC
+  id-token: write
   actions: read
 
 jobs:
   build_and_deploy_infra:
     name: Build and Deploy Infrastructure
-    # Single approval happens here
+    # ADDED: This job now targets an environment that requires approval
     environment: production
     runs-on: ubuntu-latest
     outputs:
@@ -32,12 +32,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Azure login (OIDC)
-        uses: azure/login@v2
+      - name: Azure login
+        uses: azure/login@v1
         with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -69,18 +67,16 @@ jobs:
     needs: build_and_deploy_infra
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    # <-- no environment here; no second approval
-
+    environment: production
+    
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         
-      - name: Azure login (OIDC)
-        uses: azure/login@v2
+      - name: Azure login
+        uses: azure/login@v1
         with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
 
       - name: ACR Login
         run: az acr login --name ${{ needs.build_and_deploy_infra.outputs.acr_name }}
@@ -89,8 +85,7 @@ jobs:
         run: |
           ACR_SERVER=${{ needs.build_and_deploy_infra.outputs.acr_login_server }}
           IMAGE_NAME="secureapp"
-
-          # Use context "terraform" so COPY can see terraform/www/*
+          
           docker build -t $IMAGE_NAME -f terraform/app/Dockerfile terraform
           
           docker tag $IMAGE_NAME $ACR_SERVER/$IMAGE_NAME:${{ github.sha }}
