@@ -66,8 +66,8 @@ jobs:
     name: Build and Deploy Application
     needs: build_and_deploy_infra
     if: github.ref == 'refs/heads/main'
-    # CHANGED: This no longer uses a self-hosted runner
     runs-on: ubuntu-latest
+    environment: production
     
     steps:
       - name: Checkout
