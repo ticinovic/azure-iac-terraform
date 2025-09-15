@@ -37,7 +37,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: tfstate-main
-          path: path/to/
+        
 
       - name: Terraform Init
         run: terraform init -input=false
