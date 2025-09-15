@@ -1,19 +1,39 @@
-name: Terraform Destroy
+name: Terraform Destroy (Rollback)
 
 on:
-  workflow_dispatch:
+  # Auto–rollback when you push to the rollback branch
   push:
-    branches: [ "rollback-destroy" ]
+    branches:
+      - rollback-destroy
 
+  # Optional: manual trigger when you're on the rollback branch
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type 'destroy' to confirm tearing everything down"
+        required: true
+        default: ""
+        type: string
+
+# allow reading artifacts from Deploy workflow
 permissions:
   contents: read
-  id-token: write
   actions: read
+  id-token: write
 
 jobs:
-  terraform_destroy:
-    runs-on: ubuntu-latest
+  destroy:
+    name: terraform
     environment: production
+    # Safety: if manual, require confirm='destroy'; if push to rollback-destroy, run.
+    if: |
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.confirm == 'destroy') ||
+      (github.event_name == 'push' && github.ref_name == 'rollback-destroy')
+    runs-on: ubuntu-latest
+
+    env:
+      TF_IN_AUTOMATION: "true"
+
     defaults:
       run:
         shell: bash
@@ -33,14 +53,33 @@ jobs:
         with:
           terraform_wrapper: false
 
-      - name: Download Terraform State
-        uses: actions/download-artifact@v4
+      - name: Download state from last successful Deploy run (main)
+        uses: dawidd6/action-download-artifact@v6
         with:
-          name: tfstate-main
-        
+          workflow: deploy.yml          # file name of your deploy workflow
+          workflow_conclusion: success
+          name: tfstate-main            # artifact name produced in deploy
+          branch: main                  # always destroy resources created from main
+          path: terraform
 
-      - name: Terraform Init
+      - name: Verify state exists
+        run: |
+          ls -la
+          test -s terraform.tfstate || { echo "::error ::terraform.tfstate not found. Re-run Deploy on main first."; exit 1; }
+      - name: Terraform init
         run: terraform init -input=false
 
-      - name: Terraform Destroy
-        run: terraform destroy -auto-approve -input=false
+      - name: Terraform plan (destroy)
+        run: terraform plan -destroy -no-color -input=false -out=tfdestroy.plan
+
+      - name: Upload destroy plan (for audit)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-destroy-plan
+          path: terraform/tfdestroy.plan
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Terraform apply (destroy)
+        run: terraform apply -auto-approve -input=false tfdestroy.plan
