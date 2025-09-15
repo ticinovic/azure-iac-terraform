@@ -3,8 +3,18 @@ name: Terraform Deploy
 on:
   push:
     branches: [ "main" ]
+    paths:          # Only trigger when relevant paths change
+      - 'terraform/**'
+      - 'app/**'
+      - 'www/**'
+      - '.github/workflows/**'
   pull_request:
     branches: [ "main" ]
+    paths:
+      - 'terraform/**'
+      - 'app/**'
+      - 'www/**'
+      - '.github/workflows/**'
   workflow_dispatch:
 
 permissions:
@@ -15,7 +25,6 @@ permissions:
 jobs:
   build_and_deploy_infra:
     name: Build and Deploy Infrastructure
-    # ADDED: This job now targets an environment that requires approval
     environment: production
     runs-on: ubuntu-latest
     outputs:
@@ -62,6 +71,18 @@ jobs:
           echo "resource_group_name=$(terraform output -raw resource_group_name)" >> $GITHUB_OUTPUT
           echo "web_app_name=$(terraform output -raw web_app_name)" >> $GITHUB_OUTPUT
 
+      # NEW: Publish tfstate for rollback/destroy workflow
+      - name: Upload tfstate (for rollback)
+        if: always() && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfstate-main
+          path: |
+            ./terraform.tfstate
+            ./.terraform.lock.hcl
+          if-no-files-found: error
+          retention-days: 30
+
   deploy_app_code:
     name: Build and Deploy Application
     needs: build_and_deploy_infra
@@ -96,4 +117,6 @@ jobs:
       
       - name: Restart Web App to pull latest image
         run: |
-          az webapp restart --name ${{ needs.build_and_deploy_infra.outputs.web_app_name }} --resource-group ${{ needs.build_and_deploy_infra.outputs.resource_group_name }}
+          az webapp restart \
+            --name ${{ needs.build_and_deploy_infra.outputs.web_app_name }} \
+            --resource-group ${{ needs.build_and_deploy_infra.outputs.resource_group_name }}

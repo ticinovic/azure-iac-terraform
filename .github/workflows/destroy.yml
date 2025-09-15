@@ -15,7 +15,6 @@ on:
         default: ""
         type: string
 
-# allow reading artifacts from Deploy workflow
 permissions:
   contents: read
   actions: read
@@ -53,19 +52,31 @@ jobs:
         with:
           terraform_wrapper: false
 
+      # NEW: Try to fetch the last successful tfstate from Deploy on main
       - name: Download state from last successful Deploy run (main)
+        id: dl
+        continue-on-error: true
         uses: dawidd6/action-download-artifact@v6
         with:
           workflow: deploy.yml          # file name of your deploy workflow
           workflow_conclusion: success
           name: tfstate-main            # artifact name produced in deploy
           branch: main                  # always destroy resources created from main
-          path: terraform
+          path: terraform               # downloads into repo/terraform
+
+      - name: Inspect downloaded files
+        run: |
+          echo "download outcome=${{ steps.dl.outcome }}"
+          ls -la || true
+          ls -la . || true
 
       - name: Verify state exists
         run: |
-          ls -la
-          test -s terraform.tfstate || { echo "::error ::terraform.tfstate not found. Re-run Deploy on main first."; exit 1; }
+          if [ ! -s ./terraform.tfstate ]; then
+            echo "::error ::terraform.tfstate not found."
+            echo "Hint: Ensure a successful Deploy on main uploaded the 'tfstate-main' artifact (retention 30 days)."
+            exit 1
+          fi
 
       - name: Terraform init
         run: terraform init -input=false
@@ -78,7 +89,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: terraform-destroy-plan
-          path: terraform/tfdestroy.plan
+          path: ./tfdestroy.plan
           if-no-files-found: ignore
           retention-days: 7
 
