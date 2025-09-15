@@ -52,6 +52,12 @@ jobs:
       - name: Terraform Apply
         if: github.ref == 'refs/heads/main'
         run: terraform apply -auto-approve -input=false tfplan
+
+      - name: Upload Terraform State
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfstate-main
+          path: terraform/terraform.tfstate
       
       - name: Get Terraform Outputs
         if: github.ref == 'refs/heads/main'
