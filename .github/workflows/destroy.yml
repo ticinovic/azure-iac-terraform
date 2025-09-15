@@ -33,11 +33,11 @@ jobs:
         with:
           terraform_wrapper: false
 
-      - name: Download Terraform state from last Deploy
+      - name: Download Terraform State
         uses: actions/download-artifact@v4
         with:
           name: tfstate-main
-          path: terraform
+          path: path/to/
 
       - name: Terraform Init
         run: terraform init -input=false
