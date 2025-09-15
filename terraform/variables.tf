@@ -12,7 +12,6 @@ variable "endpoint_subnet_cidr" { type = string }
 variable "service_plan_name" { type = string }
 variable "app_service_sku" { type = string }
 variable "web_app_name" { type = string }
-variable "runtime_stack" { type = string }
 
 variable "storage_account_name" { type = string }
 variable "key_vault_name" { type = string }
@@ -21,3 +20,4 @@ variable "tags" {
   type    = map(string)
   default = {}
 }
+variable "acr_name" { type = string } # must be globally unique, letters/numbers only

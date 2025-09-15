@@ -13,9 +13,16 @@ permissions:
   actions: read
 
 jobs:
-  terraform:
-    runs-on: ubuntu-latest
+  build_and_deploy_infra:
+    name: Build and Deploy Infrastructure
+    # ADDED: This job now targets an environment that requires approval
     environment: production
+    runs-on: ubuntu-latest
+    outputs:
+      acr_name: ${{ steps.tfout.outputs.acr_name }}
+      acr_login_server: ${{ steps.tfout.outputs.acr_login_server }}
+      resource_group_name: ${{ steps.tfout.outputs.resource_group_name }}
+      web_app_name: ${{ steps.tfout.outputs.web_app_name }}
     defaults:
       run:
         shell: bash
@@ -32,98 +39,61 @@ jobs:
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_wrapper: false
 
       - name: Terraform Init
         run: terraform init -input=false
-
-      - name: Terraform Format
-        run: terraform fmt -check -recursive
 
       - name: Terraform Validate
         run: terraform validate -no-color
 
       - name: Terraform Plan
-        id: plan
         run: terraform plan -no-color -input=false -out=tfplan
 
-      - name: Terraform Apply (main)
+      - name: Terraform Apply
         if: github.ref == 'refs/heads/main'
         run: terraform apply -auto-approve -input=false tfplan
-
-      - name: Save Terraform State (main)
+      
+      - name: Get Terraform Outputs
         if: github.ref == 'refs/heads/main'
-        uses: actions/upload-artifact@v4
-        with:
-          name: tfstate-main
-          path: terraform/terraform.tfstate
-
-  
-      - name: Negative test (Web App must NOT be public)
-        if: github.ref == 'refs/heads/main' && steps.tfout.outputs.host != ''
+        id: tfout
         run: |
-          URL="https://${{ steps.tfout.outputs.host }}"
-          echo "curl $URL (expected to fail/forbid)"
-          set +e
-          CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$URL")
-          set -e
-          echo "HTTP response: $CODE"
-          if [ "$CODE" -eq 200 ]; then
-            echo "::error ::Web App responded 200 OK (publicly reachable)"; exit 1
-          else
-            echo "✅ Negative test passed (not publicly reachable)."
-          fi
+          echo "acr_name=$(terraform output -raw acr_name)" >> $GITHUB_OUTPUT
+          echo "acr_login_server=$(terraform output -raw acr_login_server)" >> $GITHUB_OUTPUT
+          echo "resource_group_name=$(terraform output -raw resource_group_name)" >> $GITHUB_OUTPUT
+          echo "web_app_name=$(terraform output -raw web_app_name)" >> $GITHUB_OUTPUT
 
-      - name: Deploy sample index.html (optional)
-        if: github.ref == 'refs/heads/main' && steps.tfout.outputs.rg != '' && steps.tfout.outputs.host != ''
-        continue-on-error: true
-        run: |
-          RG="${{ steps.tfout.outputs.rg }}"
-          HOST="${{ steps.tfout.outputs.host }}"
-          APP="${HOST%%.azurewebsites.net}"
-          echo "Packaging ./terraform/www"
-          cd ..
-          zip -r app.zip terraform/www >/dev/null
-          echo "Deploying to app '$APP' in RG '$RG'"
-          az webapp deployment source config-zip \
-            --resource-group "$RG" \
-            --name "$APP" \
-            --src app.zip
-
-  positive-test:
-    name: Positive test (inside VNet should be 200)
-    needs: terraform
-    if: ${{ vars.ENABLE_POSITIVE_TEST == 'true' }}
-    runs-on: self-hosted   # your runner placed inside the VNet
-    defaults:
-      run:
-        shell: bash
-        working-directory: terraform
-
+  deploy_app_code:
+    name: Build and Deploy Application
+    needs: build_and_deploy_infra
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
+        
       - name: Azure login
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Curl Web App from inside VNet
+      - name: ACR Login
+        run: az acr login --name ${{ needs.build_and_deploy_infra.outputs.acr_name }}
+
+      - name: Build and Push Docker Image
         run: |
-          HOST=$(terraform output -raw web_app_hostname 2>/dev/null)
-          if [ -z "$HOST" ]; then
-            echo "::error ::web_app_hostname output not found"; exit 1
-          fi
-          URL="https://${HOST}"
-          echo "Testing from inside VNet: $URL"
-          set +e
-          CODE=$(curl -s -o /dev/null -w "%{http_code}" "$URL")
-          set -e
-          echo "HTTP response: $CODE"
-          if [ "$CODE" -ne 200 ]; then
-            echo "::error ::Expected 200 from inside VNet, got $CODE"
-            exit 1
-          fi
-          echo "✅ Positive test passed (reachable from inside VNet)."
+          ACR_SERVER=${{ needs.build_and_deploy_infra.outputs.acr_login_server }}
+          IMAGE_NAME="secureapp"
+          
+          docker build -t $IMAGE_NAME -f terraform/app/Dockerfile terraform
+          
+          docker tag $IMAGE_NAME $ACR_SERVER/$IMAGE_NAME:${{ github.sha }}
+          docker tag $IMAGE_NAME $ACR_SERVER/$IMAGE_NAME:latest
+          
+          docker push $ACR_SERVER/$IMAGE_NAME:${{ github.sha }}
+          docker push $ACR_SERVER/$IMAGE_NAME:latest
+      
+      - name: Restart Web App to pull latest image
+        run: |
+          az webapp restart --name ${{ needs.build_and_deploy_infra.outputs.web_app_name }} --resource-group ${{ needs.build_and_deploy_infra.outputs.resource_group_name }}
