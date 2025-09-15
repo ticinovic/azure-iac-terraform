@@ -79,9 +79,43 @@ In your GitHub repository, go to **Settings > Secrets and variables > Actions > 
 
 ---
 
-### **3. Review Terraform Variables (Optional)**
+### **3. Terraform Folder Structure**
 
-Open `terraform/variables.tf` to review or adjust default values (e.g., location, storage account name, key vault name).
+The `terraform` directory contains all Infrastructure as Code files:
+
+```
+terraform/
+├── main.tf                # Main Terraform configuration (resource definitions)
+├── variables.tf           # Input variables for customization
+├── outputs.tf             # Output values (resource names, endpoints, etc.)
+├── providers.tf           # Provider configuration (Azure setup)
+├── terraform.tfvars       # Variable values for your environment
+├── modules/               # Custom modules for reusable components
+│   ├── network/
+│   │   ├── main.tf        # VNet, subnets, NSG definitions
+│   │   ├── variables.tf   # Network module input variables
+│   │   ├── outputs.tf     # Network module outputs
+│   ├── storage/
+│   │   ├── main.tf        # Storage Account, Private Endpoint
+│   │   ├── variables.tf   # Storage module input variables
+│   │   ├── outputs.tf     # Storage module outputs
+│   ├── app_service/
+│   │   ├── main.tf        # App Service Plan, Web App, VNet integration
+│   │   ├── variables.tf   # App Service module input variables
+│   │   ├── outputs.tf     # App Service module outputs
+│   └── key_vault/         # Key Vault module
+│       ├── main.tf        # Key Vault, Private Endpoint
+│       ├── variables.tf   # Key Vault module input variables
+│       ├── outputs.tf     # Key Vault module outputs
+├── app/                   # Application source code (Node.js web app)
+│   └── Dockerfile         # Dockerfile for building the web app container
+├── www/                   # Static web content (HTML, CSS, JS)
+│   ├── index.html         # Main HTML page (e.g., "Hello World")
+└── README.md              # Documentation for the whole repository
+```
+
+> **Tip:** Each file serves a specific purpose. For example, `main.tf` defines resources, while `variables.tf` and `terraform.tfvars` allow easy customization.  
+You can customize deployment settings by editing the `terraform/terraform.tfvars` file. This file lets you override variable defaults (e.g., resource names, location, environment tags) for your environment.
 
 ---
 
@@ -89,8 +123,13 @@ Open `terraform/variables.tf` to review or adjust default values (e.g., location
 
 Once secrets are configured, deploy infrastructure using GitHub Actions:
 
-- **Manual Trigger:** Go to the **Actions** tab, select **Terraform Deploy**, and click **Run workflow**.
-- **Git Push Trigger:** Any push to `main` starts the workflow. Pull requests run in **plan-only** mode and comment the Terraform plan for review.
+  - **Manual Trigger:** Go to the **Actions** tab, select **Terraform Deploy**, and click **Run workflow**.
+  - The workflow requires **two approvals**:
+    1. **Build and Deploy Infrastructure** – approves provisioning Azure resources.
+    2. **Build and Deploy Application** – approves deployment of the application to the Web App.
+
+- **Git Push Trigger:** Any push to `main` starts the workflow, but deployment requires manual approval. Pull requests run in **plan-only** mode and comment the Terraform plan for review.
+
 
 **After deployment, check Outputs for:**
 
@@ -109,12 +148,12 @@ Once secrets are configured, deploy infrastructure using GitHub Actions:
 
 ---
 
-## **(Bonus) Destroy Workflow – Tearing Down Resources**
+## **Destroy Workflow – Tearing Down Resources**
 
 To destroy all Azure resources:
 
 1. Go to **Actions** tab.
-2. Select **Terraform Destroy**.
+2. Select **Terraform Destroy (Rollback)**.
 3. Click **Run workflow** and confirm by typing `destroy`.
 
 > **Warning:** This will **permanently delete** the infrastructure.
