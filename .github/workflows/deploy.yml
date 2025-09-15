@@ -3,19 +3,8 @@ name: Terraform Deploy
 on:
   push:
     branches: [ "main" ]
-    # Only trigger when relevant paths change
-    paths:
-      - 'terraform/**'
-      - 'app/**'
-      - 'www/**'
-      - '.github/workflows/**'
   pull_request:
     branches: [ "main" ]
-    paths:
-      - 'terraform/**'
-      - 'app/**'
-      - 'www/**'
-      - '.github/workflows/**'
   workflow_dispatch:
 
 permissions:
@@ -26,6 +15,7 @@ permissions:
 jobs:
   build_and_deploy_infra:
     name: Build and Deploy Infrastructure
+    # ADDED: This job now targets an environment that requires approval
     environment: production
     runs-on: ubuntu-latest
     outputs:
@@ -62,7 +52,7 @@ jobs:
       - name: Terraform Apply
         if: github.ref == 'refs/heads/main'
         run: terraform apply -auto-approve -input=false tfplan
-
+      
       - name: Get Terraform Outputs
         if: github.ref == 'refs/heads/main'
         id: tfout
@@ -72,35 +62,17 @@ jobs:
           echo "resource_group_name=$(terraform output -raw resource_group_name)" >> $GITHUB_OUTPUT
           echo "web_app_name=$(terraform output -raw web_app_name)" >> $GITHUB_OUTPUT
 
-      # ✅ FIXED: we are already in terraform/, so check current dir
-      - name: Verify state files exist (debug)
-        run: |
-          ls -la
-          test -s terraform.tfstate
-
-      # Publish tfstate for rollback/destroy workflow (paths are repo-root relative)
-      - name: Upload tfstate (for rollback)
-        if: always() && github.ref == 'refs/heads/main'
-        uses: actions/upload-artifact@v4
-        with:
-          name: tfstate-main
-          path: |
-            terraform/terraform.tfstate
-            terraform/.terraform.lock.hcl
-          if-no-files-found: error
-          retention-days: 30
-
   deploy_app_code:
     name: Build and Deploy Application
     needs: build_and_deploy_infra
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment: production
-
+    
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
+        
       - name: Azure login
         uses: azure/login@v1
         with:
@@ -113,17 +85,15 @@ jobs:
         run: |
           ACR_SERVER=${{ needs.build_and_deploy_infra.outputs.acr_login_server }}
           IMAGE_NAME="secureapp"
-
+          
           docker build -t $IMAGE_NAME -f terraform/app/Dockerfile terraform
-
+          
           docker tag $IMAGE_NAME $ACR_SERVER/$IMAGE_NAME:${{ github.sha }}
           docker tag $IMAGE_NAME $ACR_SERVER/$IMAGE_NAME:latest
-
+          
           docker push $ACR_SERVER/$IMAGE_NAME:${{ github.sha }}
           docker push $ACR_SERVER/$IMAGE_NAME:latest
-
+      
       - name: Restart Web App to pull latest image
         run: |
-          az webapp restart \
-            --name ${{ needs.build_and_deploy_infra.outputs.web_app_name }} \
-            --resource-group ${{ needs.build_and_deploy_infra.outputs.resource_group_name }}
+          az webapp restart --name ${{ needs.build_and_deploy_infra.outputs.web_app_name }} --resource-group ${{ needs.build_and_deploy_infra.outputs.resource_group_name }}
